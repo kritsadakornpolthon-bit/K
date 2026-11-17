@@ -50,8 +50,17 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .guide{position:absolute;left:5%;right:5%;top:22.5%;bottom:22.5%;border:3px solid rgba(255,255,255,.85);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none}
 .guide::after{content:"";position:absolute;left:4%;right:4%;top:50%;height:2px;background:#ff3b30;opacity:.8}
 .engine{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:1px 8px;border-radius:999px}
-.flash{position:absolute;inset:0;border-radius:10px;pointer-events:none;box-shadow:inset 0 0 0 6px var(--ok);opacity:0;transition:opacity .25s}
+.flash{position:absolute;inset:0;pointer-events:none;background:rgba(52,199,89,.38);box-shadow:inset 0 0 0 8px #34c759;opacity:0;transition:opacity .35s ease-out}
 .flash.on{opacity:1;transition:none}
+.camwrap.hitflash .guide{border-color:#34c759}
+.hit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;background:#1d7a46;color:#fff;border-radius:16px;padding:10px 18px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none;max-width:86%}
+.hit b{display:block;font-family:var(--f-mono);font-size:15px;font-weight:600;overflow-wrap:anywhere;opacity:.92}
+.hit span{display:block;font-size:26px;font-weight:700;line-height:1.2}
+.hit.pop{animation:pop .9s ease-out forwards}
+@keyframes pop{0%{transform:translate(-50%,-50%) scale(.6);opacity:0}12%{transform:translate(-50%,-50%) scale(1.08);opacity:1}22%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+.bump{animation:bump .35s ease-out}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.25);color:var(--ok)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.hit.pop,.bump{animation:none}}
 .camctl{display:flex;gap:8px}
 .camctl button{flex:1}
 .last{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
@@ -101,9 +110,10 @@ li.it:first-child{border-top:none}
   </section>
 
   <section class="card">
-    <div class="camwrap" id="camBox" hidden><video id="video" playsinline webkit-playsinline muted autoplay></video><div class="guide" aria-hidden="true"></div><div class="flash" id="flash"></div><span class="engine" id="engine"></span></div>
+    <div class="camwrap" id="camBox" hidden><video id="video" playsinline webkit-playsinline muted autoplay></video><div class="guide" aria-hidden="true"></div><div class="flash" id="flash"></div><div class="hit" id="hit" hidden><b id="hitCode"></b><span id="hitTot"></span></div><span class="engine" id="engine"></span></div>
     <div class="camctl">
       <button type="button" class="ink" id="btnCam">เปิดกล้องสแกน</button>
+      <button type="button" id="btnSound">เสียง: เปิด</button>
       <button type="button" id="btnSwitch" hidden>สลับกล้อง</button>
       <button type="button" id="btnTorch" hidden>ไฟฉาย</button>
     </div>
@@ -164,6 +174,7 @@ li.it:first-child{border-top:none}
 "use strict";
 const $=id=>document.getElementById(id);
 const KEY="scanstock.v1";
+const IOS_DEV=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 const load=()=>{try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}};
 let S=load()||{entries:[],names:{},round:"",loc:"",mode:"plus"};
 // entries: {id, code, qty, loc, round, at}
@@ -178,9 +189,47 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const fmt=n=>Number(n).toLocaleString("th-TH",{maximumFractionDigits:3});
 let tt;const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1400)};
 const note=(el,cls,html)=>{el.className="note "+cls;el.innerHTML=html;el.hidden=false};
-let ac;function unlockAudio(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();const b=ac.createBuffer(1,1,22050),s=ac.createBufferSource();s.buffer=b;s.connect(ac.destination);s.start(0)}catch(e){}}
-function beep(ok){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=ok?1500:300;g.gain.value=.15;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(ok?.07:.25))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?35:[80,50,80])}catch(e){}}
-function flash(){const f=$("flash");f.classList.add("on");setTimeout(()=>f.classList.remove("on"),120)}
+// Sound: an <audio> element plays on iPhone even with the silent switch on (Web Audio does not),
+// and once a tap has started it, later scans can replay it. Web Audio is only the fallback.
+let soundOn=(()=>{try{return localStorage.getItem("scanstock.sound")!=="off"}catch(e){return true}})();
+function wavURL(freqs,ms,vol){const sr=22050,n=Math.floor(sr*ms/1000),seg=Math.ceil(n/freqs.length),buf=new ArrayBuffer(44+n*2),d=new DataView(buf);
+  const w=(o,t)=>{for(let i=0;i<t.length;i++)d.setUint8(o+i,t.charCodeAt(i))};
+  w(0,"RIFF");d.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
+  d.setUint32(24,sr,true);d.setUint32(28,sr*2,true);d.setUint16(32,2,true);d.setUint16(34,16,true);w(36,"data");d.setUint32(40,n*2,true);
+  for(let i=0;i<n;i++){const f=freqs[Math.min(freqs.length-1,Math.floor(i/seg))],env=Math.min(1,i/150,(n-i)/300);
+    d.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*f*i/sr)*vol*env*32767),true)}
+  return URL.createObjectURL(new Blob([buf],{type:"audio/wav"}))}
+const sndOk=new Audio(wavURL([2700],120,.95)), sndErr=new Audio(wavURL([440,300],340,.95));
+[sndOk,sndErr].forEach(a=>{a.preload="auto";a.setAttribute("playsinline","")});
+let unlocked=false, ac=null;
+function unlockAudio(){
+  try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
+  if(unlocked)return; unlocked=true;
+  [sndOk,sndErr].forEach(a=>{try{a.muted=true;const p=a.play();
+    const done=()=>{a.pause();a.currentTime=0;a.muted=false};
+    if(p&&p.then)p.then(done).catch(()=>{a.muted=false;unlocked=false});else done()}catch(e){a.muted=false}});
+}
+document.addEventListener("touchend",unlockAudio,{passive:true});document.addEventListener("click",unlockAudio);
+function webBeep(ok){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state!=="running")ac.resume();
+  const o=ac.createOscillator(),g=ac.createGain();o.type="square";o.frequency.value=ok?2700:300;g.gain.value=.25;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(ok?.12:.3))}catch(e){}}
+function playSnd(ok){if(!soundOn)return;const a=ok?sndOk:sndErr;
+  try{a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>webBeep(ok))}catch(e){webBeep(ok)}}
+// Vibration: Android supports it directly. iPhone websites cannot use the motor, but toggling a native
+// switch control gives a haptic tick on iOS 18 and later; older iPhones simply stay silent here.
+function haptic(ok){
+  try{if(navigator.vibrate&&!IOS_DEV){navigator.vibrate(ok?40:[90,60,90]);return}}catch(e){}
+  const tick=()=>{try{const l=document.createElement("label");l.setAttribute("aria-hidden","true");l.style.display="none";
+    const i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");l.appendChild(i);document.head.appendChild(l);l.click();l.remove()}catch(e){}};
+  tick();if(!ok)setTimeout(tick,140);
+}
+function beep(ok){playSnd(ok);haptic(ok)}
+function setSoundBtn(){$("btnSound").textContent=soundOn?"เสียง: เปิด":"เสียง: ปิด"}
+$("btnSound").onclick=()=>{soundOn=!soundOn;try{localStorage.setItem("scanstock.sound",soundOn?"on":"off")}catch(e){}setSoundBtn();unlockAudio();if(soundOn)setTimeout(()=>beep(true),60)};
+setSoundBtn();
+function flash(){const f=$("flash"),c=$("camBox");f.classList.add("on");c.classList.add("hitflash");setTimeout(()=>{f.classList.remove("on");c.classList.remove("hitflash")},200)}
+function showHit(code,label){const h=$("hit");$("hitCode").textContent=S.names[code]||code;$("hitTot").textContent=label;
+  h.hidden=false;h.classList.remove("pop");void h.offsetWidth;h.classList.add("pop");clearTimeout(showHit.t);showHit.t=setTimeout(()=>{h.hidden=true},900)}
+function bumpTotal(){const t=$("lTot");t.classList.remove("bump");void t.offsetWidth;t.classList.add("bump")}
 
 function setMode(m){S.mode=m;save();$("mPlus").setAttribute("aria-pressed",m==="plus");$("mQty").setAttribute("aria-pressed",m==="qty")}
 $("mPlus").onclick=()=>setMode("plus");$("mQty").onclick=()=>setMode("qty");setMode(S.mode||"plus");
@@ -255,8 +304,8 @@ function onCode(code){
   if(seenRecently)return;
   if(!$("sheet").hidden)return;
   flash();
-  if(S.mode==="qty"){beep(true);lastCode=code;showLast();openSheet(code,"add")}
-  else{beep(true);add(code,1);toast((S.names[code]||code)+"  +1  = "+fmt(totalOf(code)))}
+  if(S.mode==="qty"){beep(true);showHit(code,"ใส่จำนวน");lastCode=code;showLast();openSheet(code,"add")}
+  else{beep(true);add(code,1);showHit(code,"+1 · รวม "+fmt(totalOf(code)));bumpTotal()}
 }
 $("manual").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();const v=$("manual").value;$("manual").value="";lastHit={code:"",t:0};onCode(v)}});
 
