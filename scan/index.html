@@ -3,168 +3,201 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#1f3a5a">
+<meta name="theme-color" content="#14263b">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="สแกนสต็อก">
 <title>สแกนนับสต็อก</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <script src="barcode-detector.js"></script>
 <style>
+/* One screen, top to bottom in the order the hand needs it: camera, the item just scanned, the running list. Settings fold away. */
 :root{
-  --bg:#eef1f4; --surface:#fff; --sunk:#e3e8ee; --line:#cdd5de; --fg:#17212b; --muted:#5a6878;
-  --accent:#e8a317; --accent-ink:#2a1d00; --ink:#1f3a5a; --ink-fg:#fff;
-  --ok:#1d7a46; --ok-bg:#dff3e7; --warn:#9a5b00; --warn-bg:#fff1d1; --bad:#b3261e; --bad-bg:#fde3e1;
-  --f-body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
-  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --bg:#eef1f4; --surface:#fff; --sunk:#e4e9ef; --line:#d0d8e1; --fg:#15202b; --muted:#5b6979;
+  --bar:#14263b; --bar-fg:#fff; --accent:#f0a81c; --accent-ink:#2a1d00;
+  --ok:#1d7a46; --ok-bg:#dff3e7; --bad:#b3261e; --bad-bg:#fde3e1; --sel:#fff4d6;
+  --f:-apple-system,BlinkMacSystemFont,"Sukhumvit Set","Thonburi","Noto Sans Thai","Leelawadee UI","Segoe UI",Tahoma,sans-serif;
+  --m:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#0f151c; --surface:#18212b; --sunk:#111922; --line:#2c3a48; --fg:#e6ecf2; --muted:#93a2b3;
-  --accent:#f2b134; --accent-ink:#241800; --ink:#8fb6e3; --ink-fg:#0b1520;
-  --ok:#5fd394; --ok-bg:#12321f; --warn:#f2b968; --warn-bg:#3a2a0e; --bad:#ff8a80; --bad-bg:#3d1714; color-scheme:dark}}
+  --bg:#0e141b; --surface:#18212b; --sunk:#111922; --line:#2b3947; --fg:#e7edf3; --muted:#94a3b4;
+  --bar:#0a1520; --accent:#f2b134; --ok:#5fd394; --ok-bg:#12321f; --bad:#ff8a80; --bad-bg:#3d1714; --sel:#3a2e12; color-scheme:dark}}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--fg)}
-body{font-family:var(--f-body);font-size:16px;line-height:1.5;
-  padding:env(safe-area-inset-top,0px) max(12px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
-.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
-header{display:flex;align-items:center;gap:10px;padding-top:10px}
-header h1{font-size:19px;margin:0;flex:1}
-.chip{font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--sunk);color:var(--muted)}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;font-weight:600;color:var(--muted);min-width:0}
-input{font:inherit;font-size:16px;color:var(--fg);background:var(--sunk);border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;min-width:0}
-input:focus{outline:none;border-color:var(--ink)}
-button{font:inherit;font-weight:600;font-size:15px;cursor:pointer;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:9px 12px}
-button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.ink{background:var(--ink);border-color:var(--ink);color:var(--ink-fg)}
-.danger{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--sunk);padding:4px;border-radius:10px}
-.seg button{border:none;background:transparent;font-size:14px;padding:8px 4px}
-.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.15)}
-.camwrap{position:relative;border-radius:10px;overflow:hidden;background:#000}
-#video{width:100%;display:block;max-height:52vh;object-fit:cover}
-.guide{position:absolute;left:5%;right:5%;top:22.5%;bottom:22.5%;border:3px solid rgba(255,255,255,.85);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none}
-.guide::after{content:"";position:absolute;left:4%;right:4%;top:50%;height:2px;background:#ff3b30;opacity:.8}
-.engine{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:1px 8px;border-radius:999px}
-.flash{position:absolute;inset:0;pointer-events:none;background:rgba(52,199,89,.38);box-shadow:inset 0 0 0 8px #34c759;opacity:0;transition:opacity .35s ease-out}
+html,body{margin:0;background:var(--bg);color:var(--fg);-webkit-text-size-adjust:100%}
+body{font-family:var(--f);font-size:16px;line-height:1.45;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+button{font:inherit;font-weight:600;cursor:pointer;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:10px 12px;touch-action:manipulation}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+input{font:inherit;font-size:16px;color:var(--fg);background:var(--sunk);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+[hidden]{display:none!important}
+
+.top{position:sticky;top:0;z-index:20;background:var(--bar);color:var(--bar-fg);display:flex;align-items:center;gap:10px;
+  padding:calc(8px + env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) 8px max(14px,env(safe-area-inset-left,0px))}
+.top .t{flex:1;min-width:0;line-height:1.2}
+.top b{font-size:17px}
+.top small{display:block;font-size:13px;opacity:.85;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.icon{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:50%}
+.icon svg{width:24px;height:24px}
+.top .icon{background:rgba(255,255,255,.12);border-color:transparent;color:#fff}
+
+.cam{position:relative;background:#000;height:42vh;min-height:240px;max-height:420px;overflow:hidden}
+#video{width:100%;height:100%;object-fit:cover;display:block}
+.guide{position:absolute;left:8%;right:8%;top:30%;bottom:30%;border:3px solid rgba(255,255,255,.9);border-radius:10px;box-shadow:0 0 0 999px rgba(0,0,0,.3);pointer-events:none;transition:border-color .2s}
+.guide::after{content:"";position:absolute;left:5%;right:5%;top:50%;height:2px;background:#ff3b30;opacity:.85}
+.cam.hitflash .guide{border-color:#34c759}
+.flash{position:absolute;inset:0;pointer-events:none;background:rgba(52,199,89,.4);box-shadow:inset 0 0 0 8px #34c759;opacity:0;transition:opacity .35s ease-out}
 .flash.on{opacity:1;transition:none}
-.camwrap.hitflash .guide{border-color:#34c759}
-.hit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;background:#1d7a46;color:#fff;border-radius:16px;padding:10px 18px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none;max-width:86%}
-.hit b{display:block;font-family:var(--f-mono);font-size:15px;font-weight:600;overflow-wrap:anywhere;opacity:.92}
-.hit span{display:block;font-size:26px;font-weight:700;line-height:1.2}
+.hit{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;background:#1d7a46;color:#fff;border-radius:16px;padding:8px 18px;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.35);pointer-events:none;max-width:86%}
+.hit b{display:block;font-family:var(--m);font-size:14px;font-weight:600;overflow-wrap:anywhere;opacity:.9}
+.hit span{display:block;font-size:28px;font-weight:700;line-height:1.2}
 .hit.pop{animation:pop .9s ease-out forwards}
 @keyframes pop{0%{transform:translate(-50%,-50%) scale(.6);opacity:0}12%{transform:translate(-50%,-50%) scale(1.08);opacity:1}22%{transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0}}
+.camtools{position:absolute;right:max(10px,env(safe-area-inset-right,0px));bottom:10px;display:flex;gap:8px;z-index:4}
+.camtools .icon{background:rgba(0,0,0,.55);border-color:rgba(255,255,255,.35);color:#fff}
+.camtools .icon[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.pill{position:absolute;left:50%;transform:translateX(-50%);z-index:4;background:rgba(0,0,0,.7);color:#fff;font-size:13.5px;font-weight:600;padding:6px 14px;border-radius:999px;white-space:nowrap;pointer-events:none}
+#soundHint{top:10px}
+#engine{left:max(10px,env(safe-area-inset-left,0px));bottom:14px;transform:none;font-size:11px;font-weight:500;padding:2px 9px;opacity:.85}
+.camstart{position:absolute;inset:0;z-index:5;width:100%;border:none;border-radius:0;background:rgba(10,20,32,.86);color:#fff;font-size:19px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.camstart svg{width:48px;height:48px}
+.camstart small{font-size:13px;font-weight:500;opacity:.8;max-width:80%}
+
+.wrap{max-width:640px;margin:0 auto;padding:12px max(12px,env(safe-area-inset-right,0px)) 0 max(12px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}
+.note{border-radius:10px;padding:10px 12px;font-size:14px}
+.note.bad{background:var(--bad-bg);color:var(--bad)} .note.ok{background:var(--ok-bg);color:var(--ok)}
+.manual{display:grid;grid-template-columns:1fr auto;gap:8px}
+.manual input{font-family:var(--m)}
+
+.cur{display:flex;flex-direction:column;gap:10px}
+.cur-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.cur .code{font-family:var(--m);font-size:20px;font-weight:600;overflow-wrap:anywhere}
+.linkbtn{border:none;background:none;padding:2px 0;color:var(--muted);font-weight:500;font-size:14px;text-align:left;text-decoration:underline;text-underline-offset:3px}
+.tot{font-family:var(--m);font-size:40px;font-weight:700;line-height:1;padding:6px 12px;border:none;background:var(--sunk);font-variant-numeric:tabular-nums;min-width:72px}
+.tot small{display:block;font-family:var(--f);font-size:11.5px;font-weight:500;color:var(--muted);margin-top:4px}
 .bump{animation:bump .35s ease-out}
-@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.25);color:var(--ok)}100%{transform:scale(1)}}
-@media (prefers-reduced-motion:reduce){.hit.pop,.bump{animation:none}}
-.camctl{display:flex;gap:8px}
-.camctl button{flex:1}
-.last{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
-.last .code{font-family:var(--f-mono);font-size:22px;font-weight:600;word-break:break-all}
-.last .tot{font-family:var(--f-mono);font-size:34px;font-weight:700;text-align:right;line-height:1}
-.last .tot small{display:block;font-family:var(--f-body);font-size:12px;font-weight:500;color:var(--muted)}
-.last .meta{grid-column:1/-1;font-size:13px;color:var(--muted)}
-.qbtns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.qbtns button{font-family:var(--f-mono);font-size:18px;padding:10px 0}
-.empty{color:var(--muted);text-align:center;font-size:14px;padding:12px}
-.note{border-radius:8px;padding:9px 11px;font-size:14px}
-.note.ok{background:var(--ok-bg);color:var(--ok)} .note.warn{background:var(--warn-bg);color:var(--warn)} .note.bad{background:var(--bad-bg);color:var(--bad)}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.18);color:var(--ok)}100%{transform:scale(1)}}
+.qb{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.qb button{font-size:17px;padding:12px 0}
+.qb .num{font-family:var(--m);font-size:20px}
+.danger{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+
+.lh{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.lh b{font-size:15px;flex:1}
+.lh input{max-width:170px;padding:7px 10px;font-size:15px}
 ul{list-style:none;margin:0;padding:0}
-li.it{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px 10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+li.it{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:11px 6px;border-top:1px solid var(--line);cursor:pointer;border-radius:8px}
 li.it:first-child{border-top:none}
-.it .c{font-family:var(--f-mono);font-weight:600;font-size:14.5px;word-break:break-all}
+li.it.sel{background:var(--sel)}
+.it .c{font-family:var(--m);font-weight:600;font-size:15px;overflow-wrap:anywhere}
 .it .n{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
-.it .q{font-family:var(--f-mono);font-size:20px;font-weight:700;text-align:right}
-.it button{padding:6px 10px;font-size:13px}
-.stats{display:flex;gap:14px;font-size:13.5px;color:var(--muted);flex-wrap:wrap}
-.stats b{color:var(--fg);font-family:var(--f-mono);font-size:17px;margin-right:3px}
-.tools{display:flex;flex-wrap:wrap;gap:8px}.tools button{flex:1 1 140px}
-.sheet{position:fixed;inset:auto 0 0 0;z-index:30;background:var(--surface);border-top:2px solid var(--accent);border-radius:14px 14px 0 0;
-  padding:14px max(14px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));box-shadow:0 -6px 24px rgba(0,0,0,.25)}
-.sheet .in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
-.sheet .big{font-family:var(--f-mono);font-size:30px;text-align:center;font-weight:700}
-.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.pad button{font-family:var(--f-mono);font-size:22px;padding:12px 0}
-.toast{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:40;background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:999px;font-weight:600;max-width:calc(100% - 24px);text-align:center}
-.help{font-size:12.5px;color:var(--muted);margin:0}
-[hidden]{display:none!important}
+.it .q{font-family:var(--m);font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);text-align:center;font-size:14px;padding:16px 8px}
+
+details.card summary{font-weight:600;cursor:pointer;color:var(--muted);list-style:none;display:flex;justify-content:space-between}
+details.card summary::-webkit-details-marker{display:none}
+details.card summary::after{content:"แตะเพื่อเปิด";font-weight:500;font-size:13px}
+details[open].card summary::after{content:"ปิด"}
+.set{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.set label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.set .chk{flex-direction:row;align-items:center;gap:10px;font-size:15px;color:var(--fg);font-weight:500}
+.set .chk input{width:22px;height:22px;flex:none}
+.set p{margin:0;font-size:13px;color:var(--muted)}
+
+.bottom{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--bg);border-top:1px solid var(--line);
+  padding:10px max(12px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.bottom button{width:100%;max-width:640px;display:block;margin:0 auto;background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:18px;padding:14px}
+
+.sheet{position:fixed;inset:auto 0 0 0;z-index:30;background:var(--surface);border-top:3px solid var(--accent);border-radius:16px 16px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,.3);
+  padding:14px max(14px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px))}
+.sheet .in{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.sheet .hd{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:14px;color:var(--muted)}
+.sheet .hd b{font-family:var(--m);color:var(--fg);overflow-wrap:anywhere}
+.sheet .big{font-family:var(--m);font-size:38px;font-weight:700;text-align:center;background:var(--sunk);border-radius:10px;padding:4px}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pad button{font-family:var(--m);font-size:24px;padding:12px 0}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row2 .ok{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:18px}
+.toast{position:fixed;left:50%;bottom:calc(88px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:40;background:var(--fg);color:var(--bg);padding:9px 18px;border-radius:999px;font-weight:600;max-width:calc(100% - 24px);text-align:center}
+@media (prefers-reduced-motion:reduce){.hit.pop,.bump{animation:none}}
 </style>
 </head>
 <body>
+<header class="top">
+  <div class="t"><b>สแกนนับสต็อก</b><small id="sum">0 รายการ · 0 ชิ้น</small></div>
+  <button type="button" class="icon" id="btnSound" aria-label="เสียง"></button>
+</header>
+
+<section class="cam" id="camBox">
+  <video id="video" playsinline webkit-playsinline muted autoplay></video>
+  <div class="guide" id="guide" aria-hidden="true"></div>
+  <div class="flash" id="flash"></div>
+  <div class="hit" id="hit" hidden><b id="hitCode"></b><span id="hitTot"></span></div>
+  <div class="pill" id="soundHint" hidden>แตะจอ 1 ครั้งเพื่อเปิดเสียง</div>
+  <span class="pill" id="engine" hidden></span>
+  <div class="camtools">
+    <button type="button" class="icon" id="btnTorch" aria-label="ไฟฉาย" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2h10l-2 6H9z"/><path d="M9 8v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V8"/><path d="M12 12v3"/></svg></button>
+    <button type="button" class="icon" id="btnSwitch" aria-label="สลับกล้อง" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5.2-2"/><path d="M15 14a3 3 0 0 1-5.2 2"/><path d="M14.5 9v2h-2M9.5 18v-2h2"/></svg></button>
+  </div>
+  <button type="button" class="camstart" id="btnCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg><span id="camStartText">แตะเพื่อเปิดกล้อง</span><small id="camStartSub"></small></button>
+</section>
+
 <div class="wrap">
-  <header><h1>สแกนนับสต็อก</h1><span class="chip" id="saved">บันทึกในเครื่องแล้ว</span></header>
+  <div id="msg" class="note" hidden></div>
 
-  <section class="card">
-    <div class="row">
-      <label for="round">รอบนับ<input id="round" autocomplete="off"></label>
-      <label for="loc">ตำแหน่ง / โซน<input id="loc" autocomplete="off" placeholder="เช่น A-01"></label>
-    </div>
-    <div class="seg" role="group" aria-label="โหมดการนับ">
-      <button type="button" id="mPlus" aria-pressed="true">สแกน = +1 (เร็ว)</button>
-      <button type="button" id="mQty" aria-pressed="false">สแกนแล้วใส่จำนวน</button>
-    </div>
-  </section>
-
-  <section class="card">
-    <div class="camwrap" id="camBox" hidden><video id="video" playsinline webkit-playsinline muted autoplay></video><div class="guide" aria-hidden="true"></div><div class="flash" id="flash"></div><div class="hit" id="hit" hidden><b id="hitCode"></b><span id="hitTot"></span></div><span class="engine" id="engine"></span></div>
-    <div class="camctl">
-      <button type="button" class="ink" id="btnCam">เปิดกล้องสแกน</button>
-      <button type="button" id="btnSound">เสียง: เปิด</button>
-      <button type="button" id="btnSwitch" hidden>สลับกล้อง</button>
-      <button type="button" id="btnTorch" hidden>ไฟฉาย</button>
-    </div>
-    <div id="camMsg" class="note" hidden></div>
-    <label for="manual">พิมพ์รหัส / ใช้เครื่องยิงบาร์โค้ด<input id="manual" autocomplete="off" spellcheck="false" placeholder="พิมพ์แล้วกด Enter" style="font-family:var(--f-mono)"></label>
-  </section>
-
-  <section class="card" id="lastCard">
-    <div id="lastEmpty" class="empty">กดเปิดกล้องแล้วส่องบาร์โค้ด ระบบจะนับให้ทันทีพร้อมเสียงบี๊บ</div>
-    <div id="lastBox" hidden>
-      <div class="last">
-        <div class="code" id="lCode"></div>
-        <div class="tot" id="lTot"></div>
-        <div class="meta" id="lMeta"></div>
+  <section class="card cur" id="cur" hidden>
+    <div class="cur-top">
+      <div style="min-width:0">
+        <div class="code" id="cCode"></div>
+        <button type="button" class="linkbtn" id="cName"></button>
+        <input id="nameIn" autocomplete="off" placeholder="พิมพ์ชื่อสินค้า แล้วกด Enter" hidden>
       </div>
-      <label for="lName" style="margin-top:8px">ชื่อสินค้า (ใส่ครั้งเดียว จำไว้ให้)<input id="lName" autocomplete="off"></label>
-      <div class="qbtns" style="margin-top:8px">
-        <button type="button" data-d="-1">−1</button><button type="button" data-d="1">+1</button>
-        <button type="button" data-d="10">+10</button><button type="button" id="btnSet">ใส่ยอด</button>
-      </div>
+      <button type="button" class="tot" id="cTot" aria-label="แก้ยอดรวม"></button>
     </div>
-    <button type="button" id="btnUndo" disabled>ย้อนกลับครั้งล่าสุด</button>
+    <div class="qb">
+      <button type="button" class="num" data-d="-1">−1</button>
+      <button type="button" class="num" data-d="1">+1</button>
+      <button type="button" id="btnUndo">ย้อน</button>
+      <button type="button" id="btnDel">ลบ</button>
+    </div>
   </section>
 
+  <form class="manual" id="mf" autocomplete="off">
+    <input id="manual" inputmode="text" spellcheck="false" autocapitalize="characters" placeholder="พิมพ์รหัสเอง / เครื่องยิงบาร์โค้ด" aria-label="พิมพ์รหัสสินค้า">
+    <button type="submit">เพิ่ม</button>
+  </form>
+
   <section class="card">
-    <div class="stats"><span><b id="sSku">0</b>รหัสสินค้า</span><span><b id="sQty">0</b>หน่วยรวม</span><span><b id="sScan">0</b>รายการ</span></div>
-    <input id="search" type="search" placeholder="ค้นหารหัส ชื่อ ตำแหน่ง" aria-label="ค้นหา">
+    <div class="lh"><b>รายการที่นับ</b><input id="search" type="search" placeholder="ค้นหา" aria-label="ค้นหา"></div>
     <ul id="list"></ul>
-    <div class="tools">
-      <button type="button" class="primary" id="btnCsv">ดาวน์โหลด CSV</button>
-      <button type="button" id="btnShare">แชร์ไฟล์</button>
-      <button type="button" id="btnCopy">คัดลอกข้อมูล</button>
-    </div>
-    <div id="expMsg" class="note" hidden></div>
-    <p class="help" id="iosTip" hidden>iPhone: ถ้าบาร์โค้ดเบลอเมื่ออยู่ใกล้ ให้ถอยมือถือออกประมาณ 15–20 ซม. หรือกด "สลับกล้อง" เพื่อเลือกเลนส์ที่โฟกัสใกล้ได้ กด แชร์ → เพิ่มไปยังหน้าจอโฮม เพื่อเปิดเหมือนแอป</p>
-    <p class="help">ข้อมูลเก็บในมือถือเครื่องนี้ (ใช้งานได้แม้ไม่มีเน็ต) นับเสร็จแล้วให้ดาวน์โหลดหรือแชร์ CSV ทุกครั้ง อย่าล้างข้อมูลเบราว์เซอร์ก่อนส่งออก</p>
-    <button type="button" class="danger" id="btnReset">ลบข้อมูลรอบนี้ทั้งหมด</button>
   </section>
+
+  <details class="card" id="more">
+    <summary>ตั้งค่าเพิ่มเติม</summary>
+    <div class="set">
+      <label for="round">ชื่อรอบนับ<input id="round" autocomplete="off"></label>
+      <label for="loc">ตำแหน่ง / โซน (ไม่ใส่ก็ได้)<input id="loc" autocomplete="off" placeholder="เช่น A-01"></label>
+      <label class="chk" for="qtyMode"><input type="checkbox" id="qtyMode">สแกนแล้วให้กดใส่จำนวนทุกครั้ง (สำหรับนับเป็นลัง)</label>
+      <button type="button" id="btnCopy">คัดลอกข้อมูล (วางใน Excel / LINE)</button>
+      <button type="button" class="danger" id="btnReset">ลบข้อมูลรอบนี้ทั้งหมด</button>
+      <p>ข้อมูลเก็บในมือถือเครื่องนี้ ใช้ได้แม้ไม่มีเน็ต นับเสร็จให้กด "ส่งออกไฟล์" ด้านล่าง</p>
+    </div>
+  </details>
 </div>
+
+<div class="bottom"><button type="button" id="btnExport">ส่งออกไฟล์ (Excel / CSV)</button></div>
 
 <div class="sheet" id="sheet" hidden>
   <div class="in">
-    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b id="shCode" style="font-family:var(--f-mono);word-break:break-all"></b><span id="shTitle" style="font-size:13px;color:var(--muted)">จำนวนที่นับได้</span></div>
+    <div class="hd"><b id="shCode"></b><span id="shTitle"></span></div>
     <div class="big" id="shVal">0</div>
     <div class="pad" id="pad">
       <button type="button">1</button><button type="button">2</button><button type="button">3</button>
       <button type="button">4</button><button type="button">5</button><button type="button">6</button>
       <button type="button">7</button><button type="button">8</button><button type="button">9</button>
-      <button type="button">.</button><button type="button">0</button><button type="button">⌫</button>
+      <button type="button">.</button><button type="button">0</button><button type="button" aria-label="ลบตัวเลข">⌫</button>
     </div>
-    <div class="row"><button type="button" id="shCancel">ยกเลิก</button><button type="button" class="primary" id="shOk">บันทึก</button></div>
+    <div class="row2"><button type="button" id="shCancel">ยกเลิก</button><button type="button" class="ok" id="shOk">ตกลง</button></div>
   </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -173,287 +206,260 @@ li.it:first-child{border-top:none}
 (function(){
 "use strict";
 const $=id=>document.getElementById(id);
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 const KEY="scanstock.v1";
-const IOS_DEV=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-const load=()=>{try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}};
-let S=load()||{entries:[],names:{},round:"",loc:"",mode:"plus"};
-// entries: {id, code, qty, loc, round, at}
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));$("saved").textContent="บันทึกในเครื่องแล้ว";$("saved").style.color=""}catch(e){$("saved").textContent="บันทึกไม่สำเร็จ!";$("saved").style.color="var(--bad)"}};
+
+// ---------- data (same storage as earlier versions, so existing counts carry over) ----------
+let S=(()=>{try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}})()||{entries:[],names:{}};
+S.entries=S.entries||[];S.names=S.names||{};
+if(!S.round)S.round="นับสต็อก "+new Date().toLocaleDateString("th-TH");
+if(S.mode!=="qty")S.mode="plus";
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast("บันทึกไม่สำเร็จ! ส่งออกไฟล์ไว้ก่อน")}}
 try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
-if(!S.round) S.round="นับสต็อก "+new Date().toLocaleDateString("th-TH");
-$("round").value=S.round; $("loc").value=S.loc||"";
-$("round").onchange=()=>{S.round=$("round").value.trim();save();render()};
-$("loc").onchange=()=>{S.loc=$("loc").value.trim();save()};
 
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmt=n=>Number(n).toLocaleString("th-TH",{maximumFractionDigits:3});
-let tt;const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1400)};
-const note=(el,cls,html)=>{el.className="note "+cls;el.innerHTML=html;el.hidden=false};
-// Sound: an <audio> element plays on iPhone even with the silent switch on (Web Audio does not),
-// and once a tap has started it, later scans can replay it. Web Audio is only the fallback.
+const r3=n=>Math.round(n*1000)/1000;
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+let tt;function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1600)}
+function msg(cls,html){const m=$("msg");if(!html){m.hidden=true;return}m.className="note "+cls;m.innerHTML=html;m.hidden=false}
+
+const roundE=()=>S.entries.filter(e=>e.round===S.round);
+const totalOf=c=>r3(roundE().filter(e=>e.code===c).reduce((s,e)=>s+e.qty,0));
+let cur=null, undo=[];
+
+function add(code,qty,merge){
+  const last=S.entries[S.entries.length-1], loc=S.loc||"";
+  if(merge&&last&&last.code===code&&last.loc===loc&&last.round===S.round&&!last.adj&&Date.now()-last.at<600000){
+    last.qty=r3(last.qty+qty);last.at=Date.now();undo.push({t:"inc",id:last.id,d:qty});
+  }else{const e={id:uid(),code,qty,loc,round:S.round,at:Date.now()};S.entries.push(e);undo.push({t:"add",id:e.id})}
+  cur=code;save();
+}
+function adjust(code,d){
+  if(totalOf(code)+d<0){beep(false);toast("ยอดติดลบไม่ได้");return false}
+  const e={id:uid(),code,qty:d,loc:S.loc||"",round:S.round,at:Date.now(),adj:true};S.entries.push(e);undo.push({t:"add",id:e.id});cur=code;save();return true;
+}
+
+// ---------- sound ----------
+// An <audio> element plays on iPhone even with the silent switch on (Web Audio does not).
+// iPhone only allows it after one tap on the page, so the first tap anywhere plays a beep and arms it.
 let soundOn=(()=>{try{return localStorage.getItem("scanstock.sound")!=="off"}catch(e){return true}})();
-function wavURL(freqs,ms,vol){const sr=22050,n=Math.floor(sr*ms/1000),seg=Math.ceil(n/freqs.length),buf=new ArrayBuffer(44+n*2),d=new DataView(buf);
+function wavURL(freqs,ms){const sr=22050,n=Math.floor(sr*ms/1000),seg=Math.ceil(n/freqs.length),b=new ArrayBuffer(44+n*2),d=new DataView(b);
   const w=(o,t)=>{for(let i=0;i<t.length;i++)d.setUint8(o+i,t.charCodeAt(i))};
   w(0,"RIFF");d.setUint32(4,36+n*2,true);w(8,"WAVE");w(12,"fmt ");d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);
   d.setUint32(24,sr,true);d.setUint32(28,sr*2,true);d.setUint16(32,2,true);d.setUint16(34,16,true);w(36,"data");d.setUint32(40,n*2,true);
-  for(let i=0;i<n;i++){const f=freqs[Math.min(freqs.length-1,Math.floor(i/seg))],env=Math.min(1,i/150,(n-i)/300);
-    d.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*f*i/sr)*vol*env*32767),true)}
-  return URL.createObjectURL(new Blob([buf],{type:"audio/wav"}))}
-const sndOk=new Audio(wavURL([2700],120,.95)), sndErr=new Audio(wavURL([440,300],340,.95));
+  for(let i=0;i<n;i++){const f=freqs[Math.min(freqs.length-1,Math.floor(i/seg))],env=Math.min(1,i/150,(n-i)/300);d.setInt16(44+i*2,Math.round(Math.sin(2*Math.PI*f*i/sr)*.95*env*32767),true)}
+  return URL.createObjectURL(new Blob([b],{type:"audio/wav"}))}
+const sndOk=new Audio(wavURL([2700],120)), sndErr=new Audio(wavURL([440,300],340));
 [sndOk,sndErr].forEach(a=>{a.preload="auto";a.setAttribute("playsinline","")});
-let unlocked=false, ac=null;
-function unlockAudio(){
+let audioReady=false, arming=false, ac=null;
+function arm(){
   try{if(navigator.audioSession)navigator.audioSession.type="playback"}catch(e){}
-  if(unlocked)return; unlocked=true;
-  [sndOk,sndErr].forEach(a=>{try{a.muted=true;const p=a.play();
-    const done=()=>{a.pause();a.currentTime=0;a.muted=false};
-    if(p&&p.then)p.then(done).catch(()=>{a.muted=false;unlocked=false});else done()}catch(e){a.muted=false}});
+  try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state!=="running")ac.resume()}catch(e){}
+  if(audioReady||arming)return; arming=true;
+  try{sndErr.muted=true;const q=sndErr.play();if(q&&q.then)q.then(()=>{sndErr.pause();sndErr.currentTime=0;sndErr.muted=false}).catch(()=>{sndErr.muted=false})}catch(e){sndErr.muted=false}
+  sndOk.muted=!soundOn;sndOk.currentTime=0;
+  let p;try{p=sndOk.play()}catch(e){arming=false;return}
+  Promise.resolve(p).then(()=>{audioReady=true;arming=false;sndOk.muted=false;showHint()}).catch(()=>{arming=false;sndOk.muted=false;showHint()});
 }
-document.addEventListener("touchend",unlockAudio,{passive:true});document.addEventListener("click",unlockAudio);
+document.addEventListener("touchend",arm,{passive:true});document.addEventListener("click",arm);
 function webBeep(ok){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state!=="running")ac.resume();
   const o=ac.createOscillator(),g=ac.createGain();o.type="square";o.frequency.value=ok?2700:300;g.gain.value=.25;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(ok?.12:.3))}catch(e){}}
-function playSnd(ok){if(!soundOn)return;const a=ok?sndOk:sndErr;
-  try{a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>webBeep(ok))}catch(e){webBeep(ok)}}
-// Vibration: Android supports it directly. iPhone websites cannot use the motor, but toggling a native
-// switch control gives a haptic tick on iOS 18 and later; older iPhones simply stay silent here.
 function haptic(ok){
-  try{if(navigator.vibrate&&!IOS_DEV){navigator.vibrate(ok?40:[90,60,90]);return}}catch(e){}
+  try{if(navigator.vibrate&&!IOS){navigator.vibrate(ok?40:[90,60,90]);return}}catch(e){}
+  // iPhone sites cannot drive the vibration motor; toggling a native switch gives a haptic tick on iOS 18+.
   const tick=()=>{try{const l=document.createElement("label");l.setAttribute("aria-hidden","true");l.style.display="none";
     const i=document.createElement("input");i.type="checkbox";i.setAttribute("switch","");l.appendChild(i);document.head.appendChild(l);l.click();l.remove()}catch(e){}};
   tick();if(!ok)setTimeout(tick,140);
 }
-function beep(ok){playSnd(ok);haptic(ok)}
-function setSoundBtn(){$("btnSound").textContent=soundOn?"เสียง: เปิด":"เสียง: ปิด"}
-$("btnSound").onclick=()=>{soundOn=!soundOn;try{localStorage.setItem("scanstock.sound",soundOn?"on":"off")}catch(e){}setSoundBtn();unlockAudio();if(soundOn)setTimeout(()=>beep(true),60)};
-setSoundBtn();
+function beep(ok){
+  if(soundOn){const a=ok?sndOk:sndErr;try{a.currentTime=0;const p=a.play();if(p&&p.catch)p.catch(()=>webBeep(ok))}catch(e){webBeep(ok)}}
+  haptic(ok);
+}
+const ICON_ON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+const ICON_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l5 6M22 9l-5 6"/></svg>';
+function showHint(){$("btnSound").innerHTML=soundOn?ICON_ON:ICON_OFF;$("btnSound").setAttribute("aria-label",soundOn?"ปิดเสียง":"เปิดเสียง");
+  $("soundHint").hidden=!(soundOn&&!audioReady&&running)}
+$("btnSound").onclick=()=>{soundOn=!soundOn;try{localStorage.setItem("scanstock.sound",soundOn?"on":"off")}catch(e){}
+  toast(soundOn?"เปิดเสียงแล้ว":"ปิดเสียงแล้ว");showHint();if(soundOn&&audioReady)beep(true)};
+
+// ---------- effects ----------
 function flash(){const f=$("flash"),c=$("camBox");f.classList.add("on");c.classList.add("hitflash");setTimeout(()=>{f.classList.remove("on");c.classList.remove("hitflash")},200)}
 function showHit(code,label){const h=$("hit");$("hitCode").textContent=S.names[code]||code;$("hitTot").textContent=label;
   h.hidden=false;h.classList.remove("pop");void h.offsetWidth;h.classList.add("pop");clearTimeout(showHit.t);showHit.t=setTimeout(()=>{h.hidden=true},900)}
-function bumpTotal(){const t=$("lTot");t.classList.remove("bump");void t.offsetWidth;t.classList.add("bump")}
+function bump(){const t=$("cTot");t.classList.remove("bump");void t.offsetWidth;t.classList.add("bump")}
 
-function setMode(m){S.mode=m;save();$("mPlus").setAttribute("aria-pressed",m==="plus");$("mQty").setAttribute("aria-pressed",m==="qty")}
-$("mPlus").onclick=()=>setMode("plus");$("mQty").onclick=()=>setMode("qty");setMode(S.mode||"plus");
-
-const roundE=()=>S.entries.filter(e=>e.round===S.round);
-const totalOf=code=>roundE().filter(e=>e.code===code).reduce((s,e)=>s+e.qty,0);
-let lastCode=null, undoStack=[];
-
-function add(code,qty){
+// ---------- a scan ----------
+let lastHit={code:"",t:0};
+function onCode(code,fromCamera){
   code=String(code).trim(); if(!code)return;
-  const loc=S.loc||"";
-  const last=S.entries[S.entries.length-1];
-  // merge consecutive +1 scans of the same code at the same spot into one row
-  if(last&&last.code===code&&last.loc===loc&&last.round===S.round&&Date.now()-last.at<10*60*1000&&qty>0&&S.mode==="plus"){
-    last.qty=Math.round((last.qty+qty)*1000)/1000; last.at=Date.now(); undoStack.push({type:"inc",id:last.id,d:qty});
-  }else{
-    const e={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),code,qty,loc,round:S.round,at:Date.now()};
-    S.entries.push(e); undoStack.push({type:"add",id:e.id});
-  }
-  lastCode=code; save(); render(); showLast();
+  const now=Date.now();
+  if(fromCamera){const seen=code===lastHit.code&&now-lastHit.t<800;lastHit={code,t:now};if(seen)return} // count again only after the code left the view
+  if(!$("sheet").hidden)return;
+  flash();beep(true);
+  if(S.mode==="qty"){cur=code;render();showHit(code,"ใส่จำนวน");openSheet(code,"add");return}
+  add(code,1,true);render();bump();showHit(code,"+1 · รวม "+fmt(totalOf(code)));
 }
-function adjust(d){ if(!lastCode)return; const loc=S.loc||"";
-  if(d<0&&totalOf(lastCode)+d<0){beep(false);toast("ยอดติดลบไม่ได้");return}
-  const e={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),code:lastCode,qty:d,loc,round:S.round,at:Date.now(),adj:true};
-  S.entries.push(e);undoStack.push({type:"add",id:e.id});save();render();showLast();beep(true)}
-$("btnUndo").onclick=()=>{
-  const u=undoStack.pop(); if(!u)return;
-  const i=S.entries.findIndex(e=>e.id===u.id);
-  if(i>=0){ if(u.type==="inc"){S.entries[i].qty=Math.round((S.entries[i].qty-u.d)*1000)/1000; if(S.entries[i].qty<=0)S.entries.splice(i,1)} else S.entries.splice(i,1) }
-  save();render();showLast();toast("ย้อนกลับแล้ว");
-};
-function showLast(){
-  $("btnUndo").disabled=!undoStack.length;
-  if(!lastCode){$("lastEmpty").hidden=false;$("lastBox").hidden=true;return}
-  $("lastEmpty").hidden=true;$("lastBox").hidden=false;
-  $("lCode").textContent=lastCode;
-  $("lTot").innerHTML=fmt(totalOf(lastCode))+"<small>ยอดรวมรอบนี้</small>";
-  const n=S.names[lastCode]||"";
-  if(document.activeElement!==$("lName")) $("lName").value=n;
-  $("lMeta").textContent=(n||"ยังไม่มีชื่อสินค้า")+" · ตำแหน่ง "+(S.loc||"ไม่ระบุ");
-}
-$("lName").onchange=()=>{if(lastCode){S.names[lastCode]=$("lName").value.trim();save();render();showLast()}};
-document.querySelectorAll(".qbtns button[data-d]").forEach(b=>b.onclick=()=>adjust(Number(b.dataset.d)));
+$("mf").addEventListener("submit",e=>{e.preventDefault();const v=$("manual").value;$("manual").value="";onCode(v,false)});
 
-// ---------- quantity sheet ----------
-let sheetCode=null, sheetMode="add", val="";
-function openSheet(code,mode){sheetCode=code;sheetMode=mode;val="";$("shCode").textContent=code;
-  $("shTitle").textContent=mode==="set"?"แก้ยอดรวมเป็น (ยอดเดิม "+fmt(totalOf(code))+")":"จำนวนที่นับได้ (ยอดเดิม "+fmt(totalOf(code))+")";
-  $("shVal").textContent="0";$("sheet").hidden=false;pauseCam(true)}
-function closeSheet(){$("sheet").hidden=true;sheetCode=null;pauseCam(false)}
+// ---------- current item card ----------
+document.querySelectorAll(".qb [data-d]").forEach(b=>b.onclick=()=>{if(!cur)return;if(adjust(cur,Number(b.dataset.d))){beep(true);render();bump()}});
+$("btnUndo").onclick=()=>{const u=undo.pop();if(!u){toast("ไม่มีอะไรให้ย้อน");return}
+  const i=S.entries.findIndex(e=>e.id===u.id);
+  if(i>=0){if(u.t==="inc"){S.entries[i].qty=r3(S.entries[i].qty-u.d);if(S.entries[i].qty<=0)S.entries.splice(i,1)}else S.entries.splice(i,1)}
+  save();render();toast("ย้อนกลับแล้ว")};
+let delArm=null;
+$("btnDel").onclick=()=>{if(!cur)return;
+  if(delArm!==cur){delArm=cur;$("btnDel").textContent="ยืนยัน?";$("btnDel").classList.add("danger");setTimeout(()=>{if(delArm){delArm=null;$("btnDel").textContent="ลบ";$("btnDel").classList.remove("danger");$("btnDel").classList.remove("danger")}},3500);return}
+  const c=cur;S.entries=S.entries.filter(e=>!(e.round===S.round&&e.code===c));delArm=null;$("btnDel").textContent="ลบ";$("btnDel").classList.remove("danger");cur=null;undo=[];save();render();toast("ลบ "+c+" แล้ว")};
+$("cTot").onclick=()=>{if(cur)openSheet(cur,"set")};
+$("cName").onclick=()=>{$("cName").hidden=true;const i=$("nameIn");i.hidden=false;i.value=S.names[cur]||"";i.focus()};
+function saveName(){const i=$("nameIn");if(i.hidden)return;if(cur){const v=i.value.trim();if(v)S.names[cur]=v;else delete S.names[cur];save()}i.hidden=true;$("cName").hidden=false;render()}
+$("nameIn").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();saveName()}});
+$("nameIn").addEventListener("blur",saveName);
+
+// ---------- keypad ----------
+let shCode=null, shMode="add", val="";
+function openSheet(code,mode){shCode=code;shMode=mode;val="";$("shCode").textContent=S.names[code]||code;
+  $("shTitle").textContent=mode==="set"?"แก้ยอดรวม (เดิม "+fmt(totalOf(code))+")":"จำนวนที่นับได้";$("shVal").textContent="0";$("sheet").hidden=false;paused=true}
+function closeSheet(){$("sheet").hidden=true;shCode=null;paused=false}
 $("pad").onclick=ev=>{const b=ev.target.closest("button");if(!b)return;const k=b.textContent;
   if(k==="⌫")val=val.slice(0,-1);else if(k==="."){if(!val.includes("."))val=(val||"0")+"."}else if(val.length<9)val=(val==="0"?"":val)+k;
   $("shVal").textContent=val||"0"};
 $("shCancel").onclick=closeSheet;
-$("shOk").onclick=()=>{const n=Number(val||"0");if(!Number.isFinite(n)){beep(false);return}
-  if(n>100000){toast("จำนวนมากผิดปกติ ตรวจอีกครั้ง");beep(false);return}
-  const code=sheetCode;
-  if(sheetMode==="set"){lastCode=code;const d=Math.round((n-totalOf(code))*1000)/1000;if(d!==0)adjust(d)}
-  else{if(n<=0){toast("ใส่จำนวนมากกว่า 0");beep(false);return}const m=S.mode;S.mode="qty";add(code,n);S.mode=m;save();beep(true)}
-  closeSheet();toast("บันทึก "+code+" × "+fmt(n));};
-$("btnSet").onclick=()=>{if(lastCode)openSheet(lastCode,"set")};
+$("shOk").onclick=()=>{const n=Number(val||"0"),code=shCode;
+  if(!Number.isFinite(n)||n<0){beep(false);return}
+  if(n>100000){beep(false);toast("จำนวนมากผิดปกติ ตรวจอีกครั้ง");return}
+  if(shMode==="set"){const d=r3(n-totalOf(code));if(d!==0)adjust(code,d);cur=code}
+  else{if(n<=0){beep(false);toast("ใส่จำนวนมากกว่า 0");return}add(code,n,false)}
+  closeSheet();beep(true);render();bump();toast((S.names[code]||code)+" = "+fmt(totalOf(code)))};
 
-// ---------- scanning ----------
-let lastHit={code:"",t:0};
-function onCode(code){
-  code=String(code).trim(); if(!code)return;
-  const now=Date.now();
-  // Count the same barcode again only after it has left the camera view (no sighting for 800 ms).
-  // Holding one item in front of the camera therefore never double-counts.
-  const seenRecently=code===lastHit.code&&now-lastHit.t<800;
-  lastHit={code,t:now};
-  if(seenRecently)return;
-  if(!$("sheet").hidden)return;
-  flash();
-  if(S.mode==="qty"){beep(true);showHit(code,"ใส่จำนวน");lastCode=code;showLast();openSheet(code,"add")}
-  else{beep(true);add(code,1);showHit(code,"+1 · รวม "+fmt(totalOf(code)));bumpTotal()}
+// ---------- list ----------
+function summary(){const g=new Map();for(const e of roundE()){const s=g.get(e.code)||{code:e.code,qty:0,locs:new Set(),last:0};
+  s.qty+=e.qty;if(e.loc)s.locs.add(e.loc);if(e.at>s.last)s.last=e.at;g.set(e.code,s)}
+  return [...g.values()].map(s=>(s.qty=r3(s.qty),s)).sort((a,b)=>b.last-a.last)}
+function render(){
+  const sum=summary();
+  $("sum").textContent=fmt(sum.length)+" รายการ · "+fmt(r3(sum.reduce((a,s)=>a+s.qty,0)))+" ชิ้น"+(S.loc?" · โซน "+S.loc:"");
+  const cc=$("cur");
+  if(cur&&sum.some(s=>s.code===cur)){cc.hidden=false;$("cCode").textContent=cur;
+    $("cName").textContent=S.names[cur]?S.names[cur]+"  (แตะเพื่อแก้)":"+ ตั้งชื่อสินค้า";
+    $("cTot").innerHTML=fmt(totalOf(cur))+"<small>แตะเพื่อแก้ยอด</small>";
+  }else{cc.hidden=true;if(cur&&!sum.some(s=>s.code===cur))cur=null}
+  const q=$("search").value.trim().toLowerCase();
+  const rows=sum.filter(s=>!q||s.code.toLowerCase().includes(q)||(S.names[s.code]||"").toLowerCase().includes(q)||[...s.locs].some(l=>l.toLowerCase().includes(q)));
+  $("list").innerHTML=!sum.length?'<li class="empty">ส่องกล้องไปที่บาร์โค้ด ระบบจะนับให้ทันที</li>'
+    :rows.length?rows.map(s=>`<li class="it${s.code===cur?" sel":""}" data-code="${esc(s.code)}"><div style="min-width:0"><div class="c">${esc(s.code)}</div><div class="n">${esc([S.names[s.code],[...s.locs].join(", ")].filter(Boolean).join(" · ")||"แตะเพื่อแก้ไข")}</div></div><div class="q">${fmt(s.qty)}</div></li>`).join("")
+    :'<li class="empty">ไม่พบรายการ</li>';
 }
-$("manual").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();const v=$("manual").value;$("manual").value="";lastHit={code:"",t:0};onCode(v)}});
+$("search").oninput=render;
+$("list").onclick=ev=>{const li=ev.target.closest("li[data-code]");if(!li)return;cur=li.dataset.code;delArm=null;$("btnDel").textContent="ลบ";$("btnDel").classList.remove("danger");render();
+  $("cur").scrollIntoView({behavior:"smooth",block:"nearest"})};
+
+// ---------- settings ----------
+$("round").value=S.round;$("loc").value=S.loc||"";$("qtyMode").checked=S.mode==="qty";
+$("round").onchange=()=>{S.round=$("round").value.trim()||S.round;$("round").value=S.round;cur=null;undo=[];save();render()};
+$("loc").onchange=()=>{S.loc=$("loc").value.trim();save();render()};
+$("qtyMode").onchange=()=>{S.mode=$("qtyMode").checked?"qty":"plus";save()};
+let resetArm=false;
+$("btnReset").onclick=()=>{if(!resetArm){resetArm=true;$("btnReset").textContent="แตะอีกครั้งเพื่อยืนยันลบทั้งหมด";setTimeout(()=>{resetArm=false;$("btnReset").textContent="ลบข้อมูลรอบนี้ทั้งหมด"},4000);return}
+  S.entries=S.entries.filter(e=>e.round!==S.round);cur=null;undo=[];resetArm=false;$("btnReset").textContent="ลบข้อมูลรอบนี้ทั้งหมด";save();render();toast("ลบรอบนี้แล้ว")};
+
+// ---------- export ----------
+function table(){return [["รอบนับ","รหัสสินค้า","ชื่อสินค้า","จำนวนรวม","ตำแหน่ง","สแกนล่าสุด"],
+  ...summary().slice().sort((a,b)=>a.code.localeCompare(b.code)).map(s=>[S.round,s.code,S.names[s.code]||"",s.qty,[...s.locs].join(" / "),new Date(s.last).toLocaleString("th-TH")])]}
+function csv(){const cell=v=>{const s=String(v??"");return /[",\n\r]/.test(s)||/^[=+\-@]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};return "﻿"+table().map(r=>r.map(cell).join(",")).join("\r\n")}
+const fname=()=>{const d=new Date(),z=n=>String(n).padStart(2,"0");return "stock-count_"+d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate())+"_"+z(d.getHours())+z(d.getMinutes())+".csv"}; // ASCII: some browsers drop Thai file names
+$("btnExport").onclick=async()=>{
+  if(!roundE().length){toast("ยังไม่มีข้อมูลให้ส่งออก");return}
+  const file=new File([csv()],fname(),{type:"text/csv"});
+  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:S.round});return}}
+  catch(e){if(e&&e.name==="AbortError")return}
+  const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=fname();document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast("บันทึกไฟล์ "+fname()+" แล้ว");
+};
+$("btnCopy").onclick=async()=>{try{await navigator.clipboard.writeText(table().map(r=>r.map(v=>String(v??"").replace(/[\t\r\n]+/g," ")).join("\t")).join("\n"));toast("คัดลอกแล้ว")}catch(e){toast("คัดลอกไม่ได้ ใช้ปุ่มส่งออกไฟล์แทน")}};
 
 // ---------- scanning engine ----------
-// 1) Native BarcodeDetector (Android Chrome: Google ML Kit, hardware accelerated) when it supports our formats.
-// 2) Otherwise ZXing-C++ compiled to WebAssembly (iPhone / desktop), served from this folder so it works offline.
+// Native BarcodeDetector (Android: Google ML Kit) when available, else ZXing-C++ WebAssembly served from this folder.
 const FORMATS=["ean_13","ean_8","upc_a","upc_e","code_128","code_39","code_93","itf","codabar","qr_code","data_matrix"];
 const LINEAR=new Set(["ean_13","ean_8","upc_a","upc_e","code_128","code_39","code_93","itf","codabar"]);
-const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-let detector=null, engineName="", stream=null, track=null, running=false, paused=false, torch=false, busy=false;
-const video=$("video"), roi=document.createElement("canvas"), rctx=roi.getContext("2d",{willReadFrequently:true});
+let detector=null,engineName="",zx=false,stream=null,track=null,running=false,paused=false,busy=false,wantCam=true,torch=false;
+const video=$("video"),roi=document.createElement("canvas"),rctx=roi.getContext("2d",{willReadFrequently:true});
 async function getDetector(){
   if(detector)return detector;
-  try{
-    if("BarcodeDetector" in window){
-      const sup=await window.BarcodeDetector.getSupportedFormats();
-      const fm=FORMATS.filter(f=>sup.includes(f));
-      if(fm.includes("ean_13")&&fm.includes("code_128")){detector=new window.BarcodeDetector({formats:fm});engineName="ML Kit (ชิปมือถือ)";return detector}
-    }
-  }catch(e){}
-  const API=window.BarcodeDetectionAPI;
-  if(!API)throw new Error("noengine");
+  try{if("BarcodeDetector" in window){const sup=await window.BarcodeDetector.getSupportedFormats();const fm=FORMATS.filter(f=>sup.includes(f));
+    if(fm.includes("ean_13")&&fm.includes("code_128")){detector=new window.BarcodeDetector({formats:fm});engineName="ML Kit";return detector}}}catch(e){}
+  const API=window.BarcodeDetectionAPI;if(!API)throw new Error("noengine");
   API.prepareZXingModule({overrides:{locateFile:(p,prefix)=>p.endsWith(".wasm")?new URL("zxing_reader.wasm",location.href).href:prefix+p},fireImmediately:true});
-  detector=new API.BarcodeDetector({formats:FORMATS});
-  engineName="ZXing-C++ WebAssembly";
-  return detector;
+  detector=new API.BarcodeDetector({formats:FORMATS});engineName="ZXing-C++";zx=true;return detector;
 }
-// A linear (1D) code is accepted only after two consecutive frames agree; QR / DataMatrix carry their own error correction.
+// Scan the part of the frame that sits under the white guide box (plus a margin), as the screen shows it.
+function guideRect(vw,vh){const vr=video.getBoundingClientRect(),gr=$("guide").getBoundingClientRect();
+  const sc=Math.max(vr.width/vw,vr.height/vh),ox=(vw-vr.width/sc)/2,oy=(vh-vr.height/sc)/2;
+  let x=ox+(gr.left-vr.left)/sc,y=oy+(gr.top-vr.top)/sc,w=gr.width/sc,h=gr.height/sc;
+  const mx=w*.08,my=h*.35;x=Math.max(0,x-mx);y=Math.max(0,y-my);w=Math.min(vw-x,w+2*mx);h=Math.min(vh-y,h+2*my);
+  return w>20&&h>20?[x,y,w,h]:[0,0,vw,vh]}
 let pend={v:"",t:0};
 async function tick(){
   if(!running)return;
   if(!paused&&!busy&&video.readyState>=2&&video.videoWidth){
     busy=true;
-    try{
-      const vw=video.videoWidth, vh=video.videoHeight;
-      const cw=Math.round(vw*.9), ch=Math.round(vh*.55);           // scan the band inside the guide box only
-      const sx=Math.round((vw-cw)/2), sy=Math.round((vh-ch)/2);
-      const scale=Math.min(1,1280/cw);
-      roi.width=Math.round(cw*scale); roi.height=Math.round(ch*scale);
-      rctx.drawImage(video,sx,sy,cw,ch,0,0,roi.width,roi.height);
-      const src=engineName.startsWith("ZXing")?rctx.getImageData(0,0,roi.width,roi.height):roi;
-      const res=await detector.detect(src);
-      const now=Date.now();
-      if(res&&res.length){
-        const r=res[0], v=String(r.rawValue||"").trim();
-        if(v){
-          if(!LINEAR.has(r.format)||(pend.v===v&&now-pend.t<600)){onCode(v,r.format);pend={v:"",t:0}}
-          else pend={v,t:now};
-        }
-      }else if(now-pend.t>600)pend={v:"",t:0};
+    try{const vw=video.videoWidth,vh=video.videoHeight,[sx,sy,cw,ch]=guideRect(vw,vh),k=Math.min(1,1000/cw);
+      roi.width=Math.round(cw*k);roi.height=Math.round(ch*k);rctx.drawImage(video,sx,sy,cw,ch,0,0,roi.width,roi.height);
+      const res=await detector.detect(zx?rctx.getImageData(0,0,roi.width,roi.height):roi),now=Date.now();
+      if(res&&res.length){const r=res[0],v=String(r.rawValue||"").trim();
+        if(v){if(!LINEAR.has(r.format)||(pend.v===v&&now-pend.t<600)){onCode(v,true);pend={v:"",t:0}}else pend={v,t:now}}} // 1D codes must read the same on two frames
+      else if(now-pend.t>600)pend={v:"",t:0};
     }catch(e){}
     busy=false;
   }
   if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(tick);else requestAnimationFrame(tick);
 }
+let camId=(()=>{try{return localStorage.getItem("scanstock.cam")||""}catch(e){return ""}})(),backCams=[];
+function camOverlay(text,sub){$("btnCam").hidden=false;$("camStartText").textContent=text;$("camStartSub").textContent=sub||""}
 async function startCam(){
-  const m=$("camMsg");
-  if(!window.isSecureContext){note(m,"bad","ต้องเปิดหน้านี้ผ่าน https เท่านั้นจึงจะใช้กล้องได้");return}
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){note(m,"bad","เบราว์เซอร์นี้เปิดกล้องไม่ได้ ลองใช้ Chrome หรือ Safari");return}
-  $("btnCam").disabled=true; note(m,"ok","กำลังเปิดกล้อง…");
+  if(running)return;
+  if(!window.isSecureContext){camOverlay("เปิดกล้องไม่ได้","ต้องเปิดหน้านี้ผ่านลิงก์ https");return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){camOverlay("เบราว์เซอร์นี้เปิดกล้องไม่ได้","ใช้ Safari หรือ Chrome");return}
+  camOverlay("กำลังเปิดกล้อง…");
   try{
     await getDetector();
     const v={width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}};
     if(camId)v.deviceId={exact:camId};else v.facingMode={ideal:"environment"};
     try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:v})}
-    catch(err){ if(camId&&/Overconstrained|NotFound/i.test(String(err&&err.name))){camId="";try{localStorage.removeItem("scanstock.cam")}catch(e){};stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"}}})} else throw err }
+    catch(err){if(camId&&/Overconstrained|NotFound/i.test(String(err&&err.name))){camId="";try{localStorage.removeItem("scanstock.cam")}catch(e){}
+      stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"}}})}else throw err}
     track=stream.getVideoTracks()[0];
-    try{const c=track.getCapabilities?track.getCapabilities():{};
-      const adv=[];if(c.focusMode&&c.focusMode.includes("continuous"))adv.push({focusMode:"continuous"});
-      if(adv.length)await track.applyConstraints({advanced:adv});
-      $("btnTorch").hidden=!c.torch;}catch(e){}
-    video.setAttribute("playsinline","");video.muted=true;
-    video.srcObject=stream; await video.play();
-    listBackCams();
-    $("camBox").hidden=false; running=true; paused=false; $("btnCam").textContent="ปิดกล้อง";
-    $("engine").textContent="ตัวอ่าน: "+engineName;
-    m.hidden=true; tick();
+    try{const c=track.getCapabilities?track.getCapabilities():{};if(c.focusMode&&c.focusMode.includes("continuous"))await track.applyConstraints({advanced:[{focusMode:"continuous"}]});$("btnTorch").hidden=!c.torch}catch(e){}
+    video.muted=true;video.setAttribute("playsinline","");video.srcObject=stream;await video.play();
+    running=true;paused=false;wantCam=true;$("btnCam").hidden=true;msg();
+    $("engine").textContent=engineName;$("engine").hidden=false;
+    listBackCams();showHint();tick();
     try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}
+    if(soundOn&&!audioReady)arm(); // allowed without a tap on some phones; otherwise the hint asks for one tap
   }catch(e){
-    const s=String(e&&(e.name||e.message||e));
-    note(m,"bad",s==="noengine"?"โหลดตัวอ่านบาร์โค้ดไม่สำเร็จ รีเฟรชหน้านี้":/NotAllowed|Permission/i.test(s)?(IOS?"ยังไม่ได้อนุญาตกล้อง: กด <b>aA</b> ที่ช่องที่อยู่เว็บ → ตั้งค่าเว็บไซต์ → กล้อง → อนุญาต (หรือ การตั้งค่า → Safari → กล้อง → อนุญาต) แล้วกดเปิดกล้องอีกครั้ง":"ยังไม่ได้อนุญาตกล้อง: กดรูปแม่กุญแจข้างที่อยู่เว็บ แล้วอนุญาตกล้อง จากนั้นกดเปิดกล้องอีกครั้ง"):"เปิดกล้องไม่ได้ ("+esc(s)+") ลองปิดแอปอื่นที่ใช้กล้องอยู่ แล้วลองใหม่");
-    stopCam();
-  }finally{$("btnCam").disabled=false}
+    const s=String(e&&(e.name||e.message||e));stopCam();
+    if(s==="noengine")camOverlay("โหลดตัวอ่านไม่สำเร็จ","แตะเพื่อลองใหม่ หรือรีเฟรชหน้า");
+    else if(/NotAllowed|Permission|Security/i.test(s))camOverlay("แตะเพื่ออนุญาตกล้อง",IOS?"ถ้ายังไม่ได้: กด aA ที่ช่องที่อยู่เว็บ → ตั้งค่าเว็บไซต์ → กล้อง → อนุญาต":"ถ้ายังไม่ได้: กดรูปแม่กุญแจข้างที่อยู่เว็บ → อนุญาตกล้อง");
+    else camOverlay("แตะเพื่อเปิดกล้องอีกครั้ง","ปิดแอปอื่นที่ใช้กล้องอยู่ก่อน ("+s+")");
+  }
 }
-function stopCam(){running=false;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}stream=null;track=null;torch=false;video.srcObject=null;$("camBox").hidden=true;$("btnCam").textContent="เปิดกล้องสแกน";$("btnTorch").hidden=true;$("btnTorch").textContent="ไฟฉาย"}
-function pauseCam(p){paused=p}
-$("btnCam").onclick=()=>{unlockAudio();running?stopCam():startCam()};
-// Back-camera choice: iPhones list several back lenses; some focus closer than others.
-let camId=(()=>{try{return localStorage.getItem("scanstock.cam")||""}catch(e){return ""}})(), backCams=[];
-async function listBackCams(){
-  try{const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
-    backCams=all.filter(d=>!/front|หน้า|facetime|user/i.test(d.label));
-    $("btnSwitch").hidden=backCams.length<2;
-    const cur=track&&track.getSettings?track.getSettings().deviceId:"";
-    const c=backCams.find(d=>d.deviceId===cur);
-    $("engine").textContent="ตัวอ่าน: "+engineName+(c&&c.label&&backCams.length>1?" · "+c.label:"");
-  }catch(e){}
-}
-$("btnSwitch").onclick=async()=>{
-  if(backCams.length<2)return;
-  const cur=track&&track.getSettings?track.getSettings().deviceId:camId;
-  const i=backCams.findIndex(d=>d.deviceId===cur);
-  camId=backCams[(i+1)%backCams.length].deviceId;
-  try{localStorage.setItem("scanstock.cam",camId)}catch(e){}
-  stopCam(); await startCam();
-};
-$("btnTorch").onclick=async()=>{try{torch=!torch;await track.applyConstraints({advanced:[{torch}]});$("btnTorch").textContent=torch?"ปิดไฟฉาย":"ไฟฉาย"}catch(e){torch=false;toast("เครื่องนี้เปิดไฟฉายไม่ได้")}};
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&running)stopCam()});
+function stopCam(){running=false;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}stream=null;track=null;torch=false;video.srcObject=null;
+  $("btnTorch").hidden=true;$("btnTorch").setAttribute("aria-pressed","false");$("engine").hidden=true;camOverlay("แตะเพื่อเปิดกล้อง");showHint()}
+async function listBackCams(){try{const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+  backCams=all.filter(d=>!/front|หน้า|facetime|user/i.test(d.label));$("btnSwitch").hidden=backCams.length<2}catch(e){}}
+$("btnCam").onclick=()=>{arm();startCam()};
+$("btnSwitch").onclick=async()=>{if(backCams.length<2)return;const curId=track&&track.getSettings?track.getSettings().deviceId:camId;
+  const i=backCams.findIndex(d=>d.deviceId===curId);camId=backCams[(i+1)%backCams.length].deviceId;try{localStorage.setItem("scanstock.cam",camId)}catch(e){}
+  stopCam();await startCam();const c=backCams.find(d=>d.deviceId===camId);toast("กล้อง: "+((c&&c.label)||"ตัวถัดไป"))};
+$("btnTorch").onclick=async()=>{try{torch=!torch;await track.applyConstraints({advanced:[{torch}]});$("btnTorch").setAttribute("aria-pressed",String(torch))}catch(e){torch=false;toast("เครื่องนี้เปิดไฟฉายไม่ได้")}};
+document.addEventListener("visibilitychange",()=>{if(document.hidden){if(running){stopCam();wantCam=true}}else if(wantCam)startCam()});
 
-// ---------- list ----------
-function summary(){const g=new Map();for(const e of roundE()){const s=g.get(e.code)||{code:e.code,qty:0,n:0,locs:new Set()};s.qty+=e.qty;if(!e.adj)s.n++;if(e.loc)s.locs.add(e.loc);g.set(e.code,s)}
-  return [...g.values()].map(s=>(s.qty=Math.round(s.qty*1000)/1000,s)).sort((a,b)=>a.code.localeCompare(b.code))}
-let confirmCode=null;
-function render(){
-  const sum=summary(), q=$("search").value.trim().toLowerCase();
-  $("sSku").textContent=fmt(sum.length);$("sQty").textContent=fmt(sum.reduce((a,s)=>a+s.qty,0));$("sScan").textContent=fmt(sum.reduce((a,s)=>a+s.n,0));
-  const rows=sum.filter(s=>!q||s.code.toLowerCase().includes(q)||(S.names[s.code]||"").toLowerCase().includes(q)||[...s.locs].some(l=>l.toLowerCase().includes(q)));
-  const ul=$("list");
-  if(!sum.length){ul.innerHTML='<li class="empty">ยังไม่มีรายการในรอบนี้</li>';return}
-  ul.innerHTML=rows.map(s=>`<li class="it"><div style="min-width:0"><div class="c">${esc(s.code)}</div><div class="n">${esc(S.names[s.code]||"")}${S.names[s.code]?" · ":""}${esc([...s.locs].join(", ")||"ไม่ระบุตำแหน่ง")}</div></div>
-    <div class="q">${fmt(s.qty)}</div>
-    <div style="display:flex;gap:6px">${confirmCode===s.code?`<button type="button" class="danger" data-del="${esc(s.code)}">ยืนยันลบ</button><button type="button" data-cancel="1">ไม่ลบ</button>`:`<button type="button" data-pick="${esc(s.code)}">แก้</button><button type="button" data-ask="${esc(s.code)}">ลบ</button>`}</div></li>`).join("")||'<li class="empty">ไม่พบรายการ</li>';
-}
-$("search").oninput=render;
-$("list").onclick=ev=>{const b=ev.target.closest("button");if(!b)return;
-  if(b.dataset.pick){lastCode=b.dataset.pick;confirmCode=null;render();showLast();$("lastCard").scrollIntoView({behavior:"smooth"});toast("เลือก "+lastCode+": กด −1/+1 หรือใส่ยอด")}
-  else if(b.dataset.ask){confirmCode=b.dataset.ask;render()}
-  else if(b.dataset.cancel){confirmCode=null;render()}
-  else if(b.dataset.del){const c=b.dataset.del;S.entries=S.entries.filter(e=>!(e.round===S.round&&e.code===c));if(lastCode===c)lastCode=null;confirmCode=null;undoStack=[];save();render();showLast();toast("ลบ "+c+" แล้ว")}};
-
-let resetArm=false;
-$("btnReset").onclick=()=>{if(!resetArm){resetArm=true;$("btnReset").textContent="กดอีกครั้งเพื่อยืนยันลบทั้งหมด";setTimeout(()=>{resetArm=false;$("btnReset").textContent="ลบข้อมูลรอบนี้ทั้งหมด"},4000);return}
-  S.entries=S.entries.filter(e=>e.round!==S.round);lastCode=null;undoStack=[];resetArm=false;$("btnReset").textContent="ลบข้อมูลรอบนี้ทั้งหมด";save();render();showLast();toast("ลบรอบนี้แล้ว")};
-
-// ---------- export ----------
-function csvText(tsv){const cell=v=>{const s=String(v??"");return /[",\n\r]/.test(s)||/^[=+\-@]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
-  const rows=[["รอบนับ","รหัสสินค้า","ชื่อสินค้า","จำนวนรวม","จำนวนครั้งที่สแกน","ตำแหน่ง"],...summary().map(s=>[S.round,s.code,S.names[s.code]||"",s.qty,s.n,[...s.locs].join(" / ")])];
-  return tsv?rows.map(r=>r.map(v=>String(v??"").replace(/[\t\r\n]+/g," ")).join("\t")).join("\n"):rows.map(r=>r.map(cell).join(",")).join("\r\n")}
-const fname=()=>(S.round||"stock").replace(/[\\/:*?"<>|\s]+/g,"_")+".csv";
-$("btnCsv").onclick=()=>{const blob=new Blob(["﻿"+csvText()],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fname();document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);note($("expMsg"),"ok","ดาวน์โหลด "+esc(fname())+" แล้ว เปิดด้วย Excel หรือ Google Sheets ได้")};
-$("btnShare").onclick=async()=>{try{const f=new File(["﻿"+csvText()],fname(),{type:"text/csv"});
-  if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:S.round});note($("expMsg"),"ok","แชร์แล้ว")}
-  else note($("expMsg"),"warn","เครื่องนี้แชร์ไฟล์ไม่ได้ ใช้ปุ่มดาวน์โหลด CSV แทน")}catch(e){if(e&&e.name!=="AbortError")note($("expMsg"),"bad","แชร์ไม่สำเร็จ")}};
-$("btnCopy").onclick=async()=>{try{await navigator.clipboard.writeText(csvText(true));note($("expMsg"),"ok","คัดลอกแล้ว วางใน Excel / Google Sheets / LINE ได้")}catch(e){note($("expMsg"),"bad","คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดแทน")}};
-
-if(IOS)$("iosTip").hidden=false;
-render();showLast();
-window.addEventListener("beforeunload",save);
+// ---------- start ----------
+showHint();render();
+const lastE=[...roundE()].sort((a,b)=>b.at-a.at)[0];if(lastE){cur=lastE.code;render()}
+startCam(); // opens the camera straight away; the phone asks for permission the first time
 })();
 </script>
 </body>
