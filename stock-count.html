@@ -1,0 +1,487 @@
+<title>นับสต็อกคลัง</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+/* Layout: one narrow working column (thumb-reachable on a phone), sticky status bar, form first, records below. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --sunk:#e3e8ee; --line:#cdd5de;
+  --fg:#17212b; --muted:#5a6878; --accent:#e8a317; --accent-ink:#2a1d00;
+  --ink:#1f3a5a; --ink-fg:#ffffff;
+  --ok:#1d7a46; --ok-bg:#dff3e7; --warn:#9a5b00; --warn-bg:#fff1d1; --bad:#b3261e; --bad-bg:#fde3e1;
+  --ai:#5b3fb5; --ai-bg:#ece6ff;
+  --f-body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151c; --surface:#18212b; --sunk:#111922; --line:#2c3a48;
+  --fg:#e6ecf2; --muted:#93a2b3; --accent:#f2b134; --accent-ink:#241800;
+  --ink:#8fb6e3; --ink-fg:#0b1520;
+  --ok:#5fd394; --ok-bg:#12321f; --warn:#f2b968; --warn-bg:#3a2a0e; --bad:#ff8a80; --bad-bg:#3d1714;
+  --ai:#b9a6ff; --ai-bg:#2a2149; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --surface:#18212b; --sunk:#111922; --line:#2c3a48;
+  --fg:#e6ecf2; --muted:#93a2b3; --accent:#f2b134; --accent-ink:#241800;
+  --ink:#8fb6e3; --ink-fg:#0b1520;
+  --ok:#5fd394; --ok-bg:#12321f; --warn:#f2b968; --warn-bg:#3a2a0e; --bad:#ff8a80; --bad-bg:#3d1714;
+  --ai:#b9a6ff; --ai-bg:#2a2149; color-scheme:dark}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--ink)}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--ink);color:var(--ink-fg);
+  margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px))) calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+  padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px))}
+.bar-in{max-width:640px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.bar h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.01em;flex:1;min-width:0}
+.bar h1 small{display:block;font-size:12px;font-weight:500;opacity:.8}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--surface);color:var(--fg)}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.chip.ok i{background:var(--ok)} .chip.warn i{background:var(--accent)} .chip.bad i{background:var(--bad)}
+section.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
+h2{font-size:15px;margin:0;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.row.stack{grid-template-columns:1fr}}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+input,select,textarea{font:inherit;font-size:17px;color:var(--fg);background:var(--sunk);border:1.5px solid var(--line);border-radius:8px;padding:10px 12px;width:100%;box-sizing:border-box;min-width:0}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px color-mix(in srgb,var(--ink) 25%,transparent)}
+input.code{font-family:var(--f-mono);font-size:20px;letter-spacing:.04em}
+.ai-filled{border-color:var(--ai)!important;background:var(--ai-bg)!important}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:10px 14px;font-weight:600;font-size:15px}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-size:18px;padding:14px;font-weight:700}
+.btn-ink{background:var(--ink);color:var(--ink-fg);border-color:var(--ink)}
+.btn-ai{background:var(--ai-bg);color:var(--ai);border-color:var(--ai)}
+.btn-danger{background:var(--bad-bg);color:var(--bad);border-color:var(--bad)}
+.scanrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.scanrow button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 8px;font-size:15px}
+.scanrow svg{width:28px;height:28px}
+.scanrow small{font-weight:500;font-size:12px;opacity:.85}
+.qty{display:grid;grid-template-columns:56px 1fr 56px;gap:8px;align-items:stretch}
+.qty button{font-size:26px;padding:0;line-height:1}
+.qty input{text-align:center;font-family:var(--f-mono);font-size:26px;font-weight:600}
+.note{border-radius:8px;padding:10px 12px;font-size:14px;line-height:1.45}
+.note.warn{background:var(--warn-bg);color:var(--warn)}
+.note.ai{background:var(--ai-bg);color:var(--ai)}
+.note.bad{background:var(--bad-bg);color:var(--bad)}
+.note.ok{background:var(--ok-bg);color:var(--ok)}
+.note b{font-weight:700}
+.actions{display:grid;grid-template-columns:1fr auto;gap:10px}
+.tabs{display:flex;gap:6px;background:var(--sunk);padding:4px;border-radius:10px}
+.tabs button{flex:1;border:none;background:transparent;padding:8px}
+.tabs button[aria-selected="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.stats{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--muted)}
+.stats b{color:var(--fg);font-family:var(--f-mono);font-size:18px;margin-right:4px}
+ul.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+ul.list li{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line)}
+ul.list li:first-child{border-top:none}
+.it-main{min-width:0}
+.it-code{font-family:var(--f-mono);font-size:15px;font-weight:600;word-break:break-all}
+.it-name{font-size:15px;overflow-wrap:anywhere}
+.it-meta{font-size:12.5px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.it-qty{text-align:right;font-family:var(--f-mono);font-size:22px;font-weight:600;white-space:nowrap}
+.it-qty small{display:block;font-family:var(--f-body);font-size:12px;font-weight:500;color:var(--muted)}
+.it-act{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+.it-act button{padding:6px 12px;font-size:13px}
+.badge{font-size:11px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--sunk);color:var(--muted);letter-spacing:.03em}
+.badge.scan{background:var(--ok-bg);color:var(--ok)} .badge.ai{background:var(--ai-bg);color:var(--ai)} .badge.pend{background:var(--warn-bg);color:var(--warn)}
+.empty{text-align:center;color:var(--muted);padding:20px 8px;font-size:14px}
+.empty b{display:block;color:var(--fg);font-size:16px;margin-bottom:4px}
+.tools{display:flex;gap:8px;flex-wrap:wrap}
+.tools button{flex:1 1 140px}
+.editing{outline:3px solid var(--accent);outline-offset:-1px}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:600;font-size:15px;z-index:20;max-width:calc(100% - 32px);text-align:center}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+#qr-scratch{position:absolute;left:-9999px;top:0;width:300px;height:300px;overflow:hidden}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.help{font-size:13px;color:var(--muted);margin:0}
+</style>
+
+<header class="bar"><div class="bar-in">
+  <h1>นับสต็อกคลัง<small id="roundLabel">รอบนับ —</small></h1>
+  <span class="chip" id="syncChip"><i></i><span id="syncText">กำลังเชื่อมต่อ…</span></span>
+</div></header>
+
+<div class="wrap" style="padding-top:16px">
+
+  <section class="card" aria-labelledby="h-setup">
+    <h2 id="h-setup">รอบนับและตำแหน่ง</h2>
+    <div class="row stack">
+      <label for="round">รอบนับ<input id="round" autocomplete="off" placeholder="เช่น นับสต็อก 18/11/2569"></label>
+      <label for="location">ตำแหน่ง / โซน / ชั้นวาง<input id="location" autocomplete="off" placeholder="เช่น A-01"></label>
+    </div>
+  </section>
+
+  <section class="card" id="formCard" aria-labelledby="h-form">
+    <h2 id="h-form">บันทึกการนับ</h2>
+    <div class="scanrow">
+      <button type="button" class="btn-ink" id="btnScan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><path d="M7 8v8M10 8v8M13 8v8M17 8v8"/></svg>
+        สแกนบาร์โค้ด<small>ถ่ายรูปบาร์โค้ด / QR</small>
+      </button>
+      <button type="button" class="btn-ai" id="btnOcr">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h6M7 14h10"/></svg>
+        อ่านฉลาก (AI)<small>ถ่ายรูปป้าย / ใบนับ</small>
+      </button>
+    </div>
+    <input type="file" id="fileScan" accept="image/*" capture="environment" class="vh" tabindex="-1">
+    <input type="file" id="fileOcr" accept="image/*" capture="environment" class="vh" tabindex="-1">
+    <div id="scanMsg" class="note" hidden></div>
+
+    <label for="code">รหัสสินค้า / บาร์โค้ด<input id="code" class="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="สแกน หรือพิมพ์แล้วกด Enter"></label>
+    <div id="dupMsg" class="note warn" hidden></div>
+    <label for="name">ชื่อสินค้า<input id="name" autocomplete="off" placeholder="ชื่อสินค้า (จำไว้ให้อัตโนมัติครั้งต่อไป)"></label>
+    <div class="row">
+      <div style="display:flex;flex-direction:column;gap:4px;min-width:0"><label for="qty">จำนวนที่นับได้</label>
+        <div class="qty">
+          <button type="button" id="minus" aria-label="ลดจำนวน">−</button>
+          <input id="qty" inputmode="decimal" autocomplete="off" value="1">
+          <button type="button" id="plus" aria-label="เพิ่มจำนวน">+</button>
+        </div>
+      </div>
+      <label for="unit">หน่วย<input id="unit" autocomplete="off" list="units" placeholder="ชิ้น"></label>
+    </div>
+    <datalist id="units"><option value="ชิ้น"><option value="กล่อง"><option value="แพ็ค"><option value="ขวด"><option value="ถุง"><option value="ลัง"><option value="กก."><option value="ลิตร"><option value="ม้วน"><option value="แผง"></datalist>
+    <label for="noteIn">หมายเหตุ (ล็อต, วันหมดอายุ, สภาพ)<input id="noteIn" autocomplete="off"></label>
+    <div id="formErr" class="note bad" hidden></div>
+    <div class="actions">
+      <button type="button" class="btn-primary" id="btnSave">บันทึก</button>
+      <button type="button" id="btnClear">ล้าง</button>
+    </div>
+    <p class="help">ใช้เครื่องยิงบาร์โค้ดแบบบลูทูธ/USB ได้: คลิกช่องรหัสแล้วยิง ระบบจะเลื่อนไปช่องจำนวนให้เอง กด Enter ในช่องจำนวนเพื่อบันทึก</p>
+  </section>
+
+  <section class="card" aria-labelledby="h-rec">
+    <h2 id="h-rec">ผลการนับ (รอบนี้)</h2>
+    <div class="stats"><span><b id="stEntries">0</b>รายการ</span><span><b id="stSkus">0</b>รหัสสินค้า</span><span><b id="stQty">0</b>หน่วยรวม</span></div>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabLog" aria-selected="true">ล่าสุด</button>
+      <button type="button" role="tab" id="tabSum" aria-selected="false">สรุปตามสินค้า</button>
+    </div>
+    <label for="search" class="vh">ค้นหา</label>
+    <input id="search" type="search" placeholder="ค้นหารหัส ชื่อ หรือตำแหน่ง" autocomplete="off">
+    <ul class="list" id="list"></ul>
+    <div class="tools">
+      <button type="button" id="btnExportLog">ส่งออกรายการ (CSV)</button>
+      <button type="button" id="btnExportSum">ส่งออกสรุป (CSV)</button>
+    </div>
+    <div id="exportMsg" class="note" hidden></div>
+  </section>
+</div>
+
+<div id="qr-scratch"></div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+// ---------- state ----------
+let db=null, sample=null, downloads=null;
+let remote=new Map();      // id -> entry from store
+let products=new Map();    // code -> {name,unit}
+let pending=LS.get("sc.pending",{}); // id -> entry | {_deleted:true}
+let connected=false, loadTimer=null, view="log", editingId=null, aiFields=new Set(), method="manual";
+const todayTH=new Date().toLocaleDateString("th-TH",{day:"numeric",month:"numeric",year:"numeric"});
+$("round").value=LS.get("sc.round","นับสต็อก "+todayTH);
+$("location").value=LS.get("sc.loc","");
+$("unit").value=LS.get("sc.unit","ชิ้น");
+
+// ---------- helpers ----------
+const norm=s=>String(s??"").trim();
+const codeKey=s=>norm(s).toUpperCase();
+function hexId(s){return "p"+Array.from(new TextEncoder().encode(s)).map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,190)}
+function newId(){const a=new Uint8Array(10);crypto.getRandomValues(a);return Date.now().toString(36)+"-"+Array.from(a,b=>b.toString(16).padStart(2,"0")).join("")}
+function fmtNum(n){return Number(n).toLocaleString("th-TH",{maximumFractionDigits:3})}
+function fmtTime(ms){return new Date(ms).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+function parseQty(v){const t=norm(v).replace(/,/g,"");if(t==="")return NaN;const n=Number(t);return Number.isFinite(n)?n:NaN}
+let toastT;function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2200)}
+function show(el,cls,html){el.className="note "+cls;el.innerHTML=html;el.hidden=false}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+let actx;function beep(ok){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=ok?1320:330;g.gain.value=.12;o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+(ok?.09:.25))}catch(e){} try{navigator.vibrate&&navigator.vibrate(ok?40:[80,60,80])}catch(e){}}
+let wake=null;async function keepAwake(){try{if(!wake&&navigator.wakeLock){wake=await navigator.wakeLock.request("screen");wake.addEventListener("release",()=>wake=null)}}catch(e){}}
+document.addEventListener("click",keepAwake,{once:true});
+
+function allEntries(){
+  const m=new Map(remote);
+  for(const [id,e] of Object.entries(pending)){ if(e&&e._deleted) m.delete(id); else m.set(id,Object.assign({},e,{_pending:true})); }
+  return [...m.entries()].map(([id,e])=>Object.assign({id},e));
+}
+function roundEntries(){const r=norm($("round").value);return allEntries().filter(e=>e.round===r)}
+
+// ---------- sync status ----------
+function setSync(){
+  const n=Object.keys(pending).length, chip=$("syncChip"), t=$("syncText");
+  chip.className="chip "+(!db?"bad":n?"warn":connected?"ok":"");
+  t.textContent=!db?(n?`เก็บในเครื่อง ${n} รายการ`:"ไม่มีฐานข้อมูล"):n?`รอส่ง ${n} รายการ`:connected?"บันทึกครบแล้ว":"กำลังเชื่อมต่อ…";
+}
+let flushing=false;
+async function flush(){
+  if(!db||flushing)return; flushing=true;
+  try{
+    for(const [id,e] of Object.entries(pending)){
+      try{
+        if(e._deleted) await db.doc("counts/"+id).delete();
+        else{const body=Object.assign({},e);delete body._pending;await db.doc("counts/"+id).set(body)}
+        delete pending[id]; LS.set("sc.pending",pending);
+      }catch(err){
+        if(err&&err.code==="quota_exceeded"){toast("ฐานข้อมูลเต็ม: ส่งออก CSV แล้วลบรายการเก่า");break}
+        if(err&&(err.code==="invalid_argument")){toast("คุณไม่มีสิทธิ์บันทึกในหน้านี้");break}
+        break; // offline or transient: try again later
+      }
+    }
+  }finally{flushing=false;setSync();render()}
+}
+setInterval(()=>{if(Object.keys(pending).length)flush()},15000);
+window.addEventListener("online",flush);
+
+// ---------- form logic ----------
+function lookup(){
+  const k=codeKey($("code").value); const dm=$("dupMsg");
+  if(!k){dm.hidden=true;return}
+  const p=products.get(k);
+  if(p){ if(!norm($("name").value)) $("name").value=p.name||""; if(p.unit&&!aiFields.has("unit")) $("unit").value=p.unit; }
+  const same=roundEntries().filter(e=>codeKey(e.code)===k&&e.id!==editingId);
+  if(same.length){
+    const tot=same.reduce((s,e)=>s+Number(e.qty||0),0);
+    const locs=[...new Set(same.map(e=>e.location||"ไม่ระบุ"))].join(", ");
+    show(dm,"warn",`รหัสนี้นับไปแล้ว <b>${fmtNum(tot)}</b> ${esc(same[0].unit||"")} (${same.length} ครั้ง) ที่ ${esc(locs)}<br>ถ้าบันทึกอีก ระบบจะรวมยอดให้ในหน้าสรุป`);
+  } else dm.hidden=true;
+}
+$("code").addEventListener("change",lookup);
+$("code").addEventListener("input",()=>{method==="scan"&&(method="manual");$("code").classList.remove("ai-filled");clearTimeout(window._lk);window._lk=setTimeout(lookup,250)});
+$("code").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();lookup();beep(true);$("qty").focus();$("qty").select()}});
+$("qty").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();save()}});
+$("qty").addEventListener("focus",()=>$("qty").select());
+["name","qty","unit","noteIn"].forEach(id=>$(id).addEventListener("input",()=>{$(id).classList.remove("ai-filled");aiFields.delete(id)}));
+function step(d){const n=parseQty($("qty").value);const v=Math.max(0,(Number.isFinite(n)?n:0)+d);$("qty").value=String(Math.round(v*1000)/1000)}
+$("minus").onclick=()=>step(-1); $("plus").onclick=()=>step(1);
+$("round").addEventListener("change",()=>{LS.set("sc.round",norm($("round").value));render();lookup()});
+$("location").addEventListener("change",()=>LS.set("sc.loc",norm($("location").value)));
+
+function clearForm(keep){
+  editingId=null; method="manual"; aiFields.clear();
+  $("formCard").classList.remove("editing"); $("btnSave").textContent="บันทึก";
+  ["code","name","noteIn"].forEach(id=>{$(id).value="";$(id).classList.remove("ai-filled")});
+  $("qty").value="1";$("qty").classList.remove("ai-filled");$("unit").classList.remove("ai-filled");
+  $("dupMsg").hidden=true;$("formErr").hidden=true;if(!keep)$("scanMsg").hidden=true;
+}
+$("btnClear").onclick=()=>{clearForm();$("code").focus()};
+
+function save(){
+  const code=norm($("code").value), name=norm($("name").value), qty=parseQty($("qty").value), unit=norm($("unit").value)||"ชิ้น";
+  const round=norm($("round").value), loc=norm($("location").value), note=norm($("noteIn").value);
+  const err=$("formErr");
+  if(!round){show(err,"bad","ใส่ชื่อรอบนับก่อน");$("round").focus();return}
+  if(!code&&!name){show(err,"bad","ใส่รหัสสินค้าหรือชื่อสินค้าอย่างน้อยหนึ่งอย่าง");$("code").focus();beep(false);return}
+  if(!Number.isFinite(qty)||qty<0){show(err,"bad","จำนวนต้องเป็นตัวเลข 0 ขึ้นไป");$("qty").focus();beep(false);return}
+  if(qty>100000){show(err,"bad","จำนวนมากผิดปกติ (เกิน 100,000) ตรวจสอบอีกครั้ง แล้วแก้ช่องจำนวน");$("qty").focus();beep(false);return}
+  err.hidden=true;
+  const id=editingId||newId();
+  const prev=editingId?allEntries().find(e=>e.id===editingId):null;
+  const entry={code,name,qty,unit,location:loc,note,round,method:prev?prev.method:method,at:prev?prev.at:Date.now(),editedAt:prev?Date.now():null};
+  pending[id]=entry; LS.set("sc.pending",pending);
+  LS.set("sc.unit",unit);
+  // remember product name/unit for next time
+  if(db&&code&&name){const k=codeKey(code);const p=products.get(k);if(!p||p.name!==name||p.unit!==unit){products.set(k,{name,unit});db.doc("products/"+hexId(k)).set({code:k,name,unit}).catch(()=>{})}}
+  else if(code&&name) products.set(codeKey(code),{name,unit});
+  beep(true); toast(editingId?"แก้ไขแล้ว":`บันทึก ${code||name} × ${fmtNum(qty)}`);
+  clearForm(); render(); setSync(); flush(); $("code").focus();
+}
+$("btnSave").onclick=save;
+
+// ---------- barcode from photo ----------
+let qr=null;
+async function decodeBarcode(file){
+  if("BarcodeDetector" in window){
+    try{const bd=new BarcodeDetector();const bmp=await createImageBitmap(file);const r=await bd.detect(bmp);if(r&&r.length)return r[0].rawValue}catch(e){}
+  }
+  if(!window.Html5Qrcode) throw new Error("nolib");
+  qr=qr||new Html5Qrcode("qr-scratch",{verbose:false});
+  return await qr.scanFile(file,false);
+}
+$("btnScan").onclick=()=>{$("fileScan").value="";$("fileScan").click()};
+$("fileScan").addEventListener("change",async()=>{
+  const f=$("fileScan").files[0]; if(!f)return; const m=$("scanMsg");
+  show(m,"ok",'<span class="spin"></span> กำลังอ่านบาร์โค้ด…');
+  try{
+    const txt=norm(await decodeBarcode(f));
+    if(!txt) throw new Error("empty");
+    $("code").value=txt; method="scan"; $("code").classList.remove("ai-filled");
+    show(m,"ok",`อ่านบาร์โค้ดได้: <b class="mono">${esc(txt)}</b>`); beep(true); lookup(); $("qty").focus(); $("qty").select();
+  }catch(e){
+    beep(false);
+    show(m,"bad",e&&e.message==="nolib"?"โหลดตัวอ่านบาร์โค้ดไม่สำเร็จ ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้า หรือพิมพ์รหัสเอง":"อ่านบาร์โค้ดไม่ได้ ลองถ่ายใหม่: ให้บาร์โค้ดเต็มกรอบ ชัด ไม่ย้อนแสง ไม่เอียง หรือพิมพ์รหัสเอง");
+  }
+});
+
+// ---------- AI label reading ----------
+const OCR_PROMPT=`You are reading ONE photo taken during a warehouse stock count in Thailand. It may show a product label, a shelf tag, a carton, or one line of a handwritten count sheet.
+Extract only what is clearly legible. Never guess or complete characters you cannot see clearly.
+Reply with only this JSON object:
+{"code": string|null, "name": string|null, "qty": number|null, "unit": string|null, "lot": string|null, "expiry": string|null, "confidence": number, "uncertain": string[], "remark": string}
+- code: the barcode number (digits under the bars) or the SKU / product code exactly as printed, no spaces added.
+- name: product name exactly as printed, keep Thai text in Thai.
+- qty: only a counted quantity explicitly written (e.g. on a count sheet or "QTY 24"). Do NOT use pack size, weight or volume as qty. Otherwise null.
+- unit: unit word if shown (e.g. ชิ้น, กล่อง, ขวด, PCS, BOX), else null.
+- confidence: 0 to 1, how sure you are that code and qty are exactly right.
+- uncertain: names of fields where any character is unclear (set those fields to null).
+- remark: one short Thai sentence about what you saw or why something is unreadable.`;
+$("btnOcr").onclick=async()=>{
+  const m=$("scanMsg");
+  if(!sample){show(m,"bad","การอ่านฉลากด้วย AI ใช้ไม่ได้ในหน้านี้ตอนนี้ ใช้การสแกนบาร์โค้ดหรือพิมพ์แทน");return}
+  $("fileOcr").value="";$("fileOcr").click();
+};
+$("fileOcr").addEventListener("change",async()=>{
+  const f=$("fileOcr").files[0]; if(!f)return; const m=$("scanMsg");
+  show(m,"ai",'<span class="spin"></span> AI กำลังอ่านฉลาก… (ประมาณ 5–15 วินาที)'); $("btnOcr").disabled=true;
+  try{
+    const r=await sample.json(OCR_PROMPT,{images:[f],cache:false});
+    if(!r||typeof r!=="object") throw {code:"invalid_json"};
+    const unc=new Set(Array.isArray(r.uncertain)?r.uncertain.map(String):[]);
+    aiFields.clear(); method="ai";
+    const put=(id,v)=>{if(v!=null&&String(v).trim()!==""){$(id).value=String(v).trim();$(id).classList.add("ai-filled");aiFields.add(id)}};
+    put("code",r.code); put("name",r.name);
+    if(typeof r.qty==="number"&&Number.isFinite(r.qty)) put("qty",r.qty);
+    put("unit",r.unit);
+    const extra=[r.lot&&("ล็อต "+r.lot),r.expiry&&("หมดอายุ "+r.expiry)].filter(Boolean).join(", ");
+    if(extra) put("noteIn",extra);
+    const conf=typeof r.confidence==="number"?Math.round(r.confidence*100):null;
+    const low=conf!=null&&conf<85;
+    let html=`<b>AI อ่านได้ ตรวจทุกช่องสีม่วงกับของจริงก่อนกดบันทึก</b>`;
+    if(conf!=null) html+=`<br>ความมั่นใจ ${conf}%${low?" (ต่ำ ตรวจให้ละเอียด)":""}`;
+    if(unc.size) html+=`<br>อ่านไม่ชัด: ${esc([...unc].join(", "))}`;
+    if(r.remark) html+=`<br>${esc(r.remark)}`;
+    show(m,low||unc.size?"warn":"ai",html); beep(!low);
+    lookup(); $("qty").focus();
+  }catch(e){
+    beep(false);
+    const c=e&&e.code;
+    show(m,"bad",c==="not_granted"?"ยังไม่ได้อนุญาตให้หน้านี้ใช้ AI กดอ่านฉลากอีกครั้งแล้วเลือกอนุญาต":c==="rate_limited"?"ใช้ AI ถี่เกินไป รอสักครู่แล้วลองใหม่":c==="image_rejected"?"รูปนี้ใช้ไม่ได้ ลองถ่ายใหม่เป็น JPG/PNG":"AI อ่านรูปนี้ไม่สำเร็จ ลองถ่ายใหม่ให้ชัดขึ้น หรือพิมพ์เอง");
+  }finally{$("btnOcr").disabled=false}
+});
+
+// ---------- list rendering ----------
+function setTab(v){view=v;$("tabLog").setAttribute("aria-selected",v==="log");$("tabSum").setAttribute("aria-selected",v==="sum");render()}
+$("tabLog").onclick=()=>setTab("log"); $("tabSum").onclick=()=>setTab("sum");
+$("search").addEventListener("input",()=>render());
+
+function summarize(list){
+  const g=new Map();
+  for(const e of list){
+    const k=codeKey(e.code)||("NAME:"+norm(e.name));
+    const s=g.get(k)||{code:e.code,name:e.name,unit:e.unit,qty:0,n:0,locs:new Set(),last:0};
+    s.qty+=Number(e.qty||0); s.n++; if(e.location)s.locs.add(e.location); if(!s.name&&e.name)s.name=e.name;
+    if(e.at>s.last){s.last=e.at;s.unit=e.unit||s.unit}
+    g.set(k,s);
+  }
+  return [...g.values()].sort((a,b)=>String(a.code||a.name).localeCompare(String(b.code||b.name),"th"));
+}
+let confirmId=null;
+function render(){
+  const r=norm($("round").value); $("roundLabel").textContent="รอบนับ: "+(r||"—");
+  const ents=roundEntries().sort((a,b)=>b.at-a.at);
+  const sum=summarize(ents);
+  $("stEntries").textContent=fmtNum(ents.length); $("stSkus").textContent=fmtNum(sum.length);
+  $("stQty").textContent=fmtNum(ents.reduce((s,e)=>s+Number(e.qty||0),0));
+  const q=norm($("search").value).toLowerCase();
+  const hit=x=>!q||[x.code,x.name,x.location,x.note].some(v=>String(v||"").toLowerCase().includes(q))||(x.locs&&[...x.locs].some(l=>l.toLowerCase().includes(q)));
+  const ul=$("list"); ul.innerHTML="";
+  if(!ents.length){
+    ul.innerHTML=`<li class="empty" style="display:block"><b>ยังไม่มีรายการในรอบนี้</b>สแกนบาร์โค้ด อ่านฉลาก หรือพิมพ์รหัสด้านบน แล้วกดบันทึก รายการจะขึ้นที่นี่ทันที</li>`;
+    return;
+  }
+  if(view==="log"){
+    const rows=ents.filter(hit).slice(0,300);
+    for(const e of rows){
+      const li=document.createElement("li");
+      const mb=e.method==="scan"?'<span class="badge scan">สแกน</span>':e.method==="ai"?'<span class="badge ai">AI</span>':'<span class="badge">พิมพ์</span>';
+      li.innerHTML=`<div class="it-main"><div class="it-code">${esc(e.code||"(ไม่มีรหัส)")}</div><div class="it-name">${esc(e.name||"")}</div>
+        <div class="it-meta">${mb}${e._pending?'<span class="badge pend">รอส่ง</span>':""}<span>${esc(e.location||"ไม่ระบุตำแหน่ง")}</span><span>${fmtTime(e.at)}</span>${e.editedAt?"<span>แก้ไขแล้ว</span>":""}${e.note?`<span>${esc(e.note)}</span>`:""}</div></div>
+        <div class="it-qty">${fmtNum(e.qty)}<small>${esc(e.unit||"")}</small></div>
+        <div class="it-act">${confirmId===e.id
+          ?`<span style="align-self:center;font-size:13px">ลบรายการนี้?</span><button type="button" class="btn-danger" data-act="del" data-id="${e.id}">ลบเลย</button><button type="button" data-act="cancel">ไม่ลบ</button>`
+          :`<button type="button" data-act="edit" data-id="${e.id}">แก้ไข</button><button type="button" data-act="ask" data-id="${e.id}">ลบ</button>`}</div>`;
+      ul.appendChild(li);
+    }
+    if(!rows.length) ul.innerHTML='<li class="empty" style="display:block">ไม่พบรายการที่ค้นหา</li>';
+  }else{
+    const rows=sum.filter(hit);
+    for(const s of rows){
+      const li=document.createElement("li");
+      li.innerHTML=`<div class="it-main"><div class="it-code">${esc(s.code||"(ไม่มีรหัส)")}</div><div class="it-name">${esc(s.name||"")}</div>
+        <div class="it-meta"><span>${s.n} ครั้ง</span><span>${esc([...s.locs].join(", ")||"ไม่ระบุตำแหน่ง")}</span></div></div>
+        <div class="it-qty">${fmtNum(s.qty)}<small>${esc(s.unit||"")}</small></div>`;
+      ul.appendChild(li);
+    }
+    if(!rows.length) ul.innerHTML='<li class="empty" style="display:block">ไม่พบรายการที่ค้นหา</li>';
+  }
+}
+$("list").addEventListener("click",ev=>{
+  const b=ev.target.closest("button[data-act]"); if(!b)return;
+  const id=b.dataset.id, act=b.dataset.act;
+  if(act==="ask"){confirmId=id;render()}
+  else if(act==="cancel"){confirmId=null;render()}
+  else if(act==="del"){confirmId=null;pending[id]={_deleted:true};LS.set("sc.pending",pending);if(editingId===id)clearForm();render();setSync();flush();toast("ลบแล้ว")}
+  else if(act==="edit"){
+    const e=allEntries().find(x=>x.id===id); if(!e)return;
+    clearForm(); editingId=id;
+    $("code").value=e.code||"";$("name").value=e.name||"";$("qty").value=String(e.qty);$("unit").value=e.unit||"";$("noteIn").value=e.note||"";$("location").value=e.location||"";
+    $("formCard").classList.add("editing");$("btnSave").textContent="บันทึกการแก้ไข";
+    $("formCard").scrollIntoView({behavior:"smooth",block:"start"});$("qty").focus();
+  }
+});
+
+// ---------- export ----------
+function csv(rows){return "﻿"+rows.map(r=>r.map(v=>{const s=String(v??"");return /[",\n\r]/.test(s)||/^[=+\-@]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s}).join(",")).join("\r\n")}
+async function offer(name,text){
+  const m=$("exportMsg");
+  if(downloads){
+    try{await downloads.save({filename:name,data:new Blob([text],{type:"text/csv;charset=utf-8"})});show(m,"ok","ส่งออกไฟล์ "+esc(name)+" แล้ว");return}
+    catch(e){ if(e&&e.code&&/declin|cancel|dismiss/i.test(e.code)){m.hidden=true;return} }
+  }
+  try{await navigator.clipboard.writeText(text);show(m,"ok","คัดลอกข้อมูลแล้ว วางใน Excel หรือ Google Sheets ได้เลย")}
+  catch(e){show(m,"bad","ส่งออกไม่สำเร็จในเครื่องนี้ ลองเปิดหน้านี้ในเบราว์เซอร์บนคอมพิวเตอร์")}
+}
+const fname=s=>(norm($("round").value)||"stock").replace(/[\\/:*?"<>|\s]+/g,"_")+s+".csv";
+$("btnExportLog").onclick=()=>{
+  const ents=roundEntries().sort((a,b)=>a.at-b.at);
+  offer(fname("_รายการ"),csv([["รอบนับ","ตำแหน่ง","รหัสสินค้า","ชื่อสินค้า","จำนวน","หน่วย","หมายเหตุ","วิธีบันทึก","เวลา"],...ents.map(e=>[e.round,e.location,e.code,e.name,e.qty,e.unit,e.note,e.method==="scan"?"สแกน":e.method==="ai"?"AI":"พิมพ์",new Date(e.at).toLocaleString("th-TH")])]));
+};
+$("btnExportSum").onclick=()=>{
+  const s=summarize(roundEntries());
+  offer(fname("_สรุป"),csv([["รหัสสินค้า","ชื่อสินค้า","จำนวนรวม","หน่วย","จำนวนครั้งที่นับ","ตำแหน่ง"],...s.map(x=>[x.code,x.name,x.qty,x.unit,x.n,[...x.locs].join(" / ")])]));
+};
+
+// ---------- boot ----------
+render(); setSync(); $("code").focus();
+const C=window.claude;
+if(C&&C.use){
+  C.use("db").then(d=>{
+    db=d; setSync();
+    if(!db){render();return}
+    loadTimer=setTimeout(()=>{if(!connected){$("syncText").textContent="ยังเชื่อมต่อไม่ได้ บันทึกต่อได้ ระบบจะส่งให้เอง"}},10000);
+    db.collection("counts").onSnapshot(snap=>{
+      remote=new Map(snap.docs.map(d=>[d.id,d.data()]));
+      if(!snap.metadata.fromCache){connected=true;clearTimeout(loadTimer)}
+      setSync(); render(); lookup();
+    },err=>{connected=false;clearTimeout(loadTimer);$("syncChip").className="chip bad";$("syncText").textContent="ขาดการเชื่อมต่อ รีเฟรชหน้า"});
+    db.collection("products").onSnapshot(snap=>{
+      for(const d of snap.docs){const x=d.data();if(x&&x.code)products.set(x.code,{name:x.name,unit:x.unit})}
+    },()=>{});
+    flush();
+  });
+  C.use("sample").then(s=>{sample=s; if(!s){$("btnOcr").disabled=true;$("btnOcr").title="ใช้ไม่ได้ในหน้านี้"}});
+  C.use("downloads").then(d=>{downloads=d});
+}else{ $("btnOcr").disabled=true; setSync(); }
+})();
+</script>
