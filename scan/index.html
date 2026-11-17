@@ -7,7 +7,7 @@
 <title>สแกนนับสต็อก</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
-<script src="html5-qrcode.min.js"></script>
+<script src="barcode-detector.js"></script>
 <style>
 :root{
   --bg:#eef1f4; --surface:#fff; --sunk:#e3e8ee; --line:#cdd5de; --fg:#17212b; --muted:#5a6878;
@@ -42,9 +42,11 @@ button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--sunk);padding:4px;border-radius:10px}
 .seg button{border:none;background:transparent;font-size:14px;padding:8px 4px}
 .seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.15)}
-#reader{width:100%;border-radius:10px;overflow:hidden;background:#000;min-height:0}
-#reader video{width:100%!important;display:block}
-.camwrap{position:relative}
+.camwrap{position:relative;border-radius:10px;overflow:hidden;background:#000}
+#video{width:100%;display:block;max-height:52vh;object-fit:cover}
+.guide{position:absolute;left:5%;right:5%;top:22.5%;bottom:22.5%;border:3px solid rgba(255,255,255,.85);border-radius:8px;box-shadow:0 0 0 999px rgba(0,0,0,.28);pointer-events:none}
+.guide::after{content:"";position:absolute;left:4%;right:4%;top:50%;height:2px;background:#ff3b30;opacity:.8}
+.engine{position:absolute;left:8px;bottom:6px;font-size:11px;color:#fff;background:rgba(0,0,0,.5);padding:1px 8px;border-radius:999px}
 .flash{position:absolute;inset:0;border-radius:10px;pointer-events:none;box-shadow:inset 0 0 0 6px var(--ok);opacity:0;transition:opacity .25s}
 .flash.on{opacity:1;transition:none}
 .camctl{display:flex;gap:8px}
@@ -96,7 +98,7 @@ li.it:first-child{border-top:none}
   </section>
 
   <section class="card">
-    <div class="camwrap"><div id="reader"></div><div class="flash" id="flash"></div></div>
+    <div class="camwrap" id="camBox" hidden><video id="video" playsinline muted autoplay></video><div class="guide" aria-hidden="true"></div><div class="flash" id="flash"></div><span class="engine" id="engine"></span></div>
     <div class="camctl">
       <button type="button" class="ink" id="btnCam">เปิดกล้องสแกน</button>
       <button type="button" id="btnTorch" hidden>ไฟฉาย</button>
@@ -252,31 +254,85 @@ function onCode(code){
 }
 $("manual").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();const v=$("manual").value;$("manual").value="";lastHit={code:"",t:0};onCode(v)}});
 
-let qr=null, running=false, torch=false;
-function formats(){const F=window.Html5QrcodeSupportedFormats;if(!F)return undefined;
-  return ["EAN_13","EAN_8","UPC_A","UPC_E","CODE_128","CODE_39","CODE_93","ITF","CODABAR","QR_CODE","DATA_MATRIX"].map(k=>F[k]).filter(v=>v!==undefined)}
+// ---------- scanning engine ----------
+// 1) Native BarcodeDetector (Android Chrome: Google ML Kit, hardware accelerated) when it supports our formats.
+// 2) Otherwise ZXing-C++ compiled to WebAssembly (iPhone / desktop), served from this folder so it works offline.
+const FORMATS=["ean_13","ean_8","upc_a","upc_e","code_128","code_39","code_93","itf","codabar","qr_code","data_matrix"];
+const LINEAR=new Set(["ean_13","ean_8","upc_a","upc_e","code_128","code_39","code_93","itf","codabar"]);
+let detector=null, engineName="", stream=null, track=null, running=false, paused=false, torch=false, busy=false;
+const video=$("video"), roi=document.createElement("canvas"), rctx=roi.getContext("2d",{willReadFrequently:true});
+async function getDetector(){
+  if(detector)return detector;
+  try{
+    if("BarcodeDetector" in window){
+      const sup=await window.BarcodeDetector.getSupportedFormats();
+      const fm=FORMATS.filter(f=>sup.includes(f));
+      if(fm.includes("ean_13")&&fm.includes("code_128")){detector=new window.BarcodeDetector({formats:fm});engineName="ML Kit (ชิปมือถือ)";return detector}
+    }
+  }catch(e){}
+  const API=window.BarcodeDetectionAPI;
+  if(!API)throw new Error("noengine");
+  API.prepareZXingModule({overrides:{locateFile:(p,prefix)=>p.endsWith(".wasm")?new URL("zxing_reader.wasm",location.href).href:prefix+p},fireImmediately:true});
+  detector=new API.BarcodeDetector({formats:FORMATS});
+  engineName="ZXing-C++ WebAssembly";
+  return detector;
+}
+// A linear (1D) code is accepted only after two consecutive frames agree; QR / DataMatrix carry their own error correction.
+let pend={v:"",t:0};
+async function tick(){
+  if(!running)return;
+  if(!paused&&!busy&&video.readyState>=2&&video.videoWidth){
+    busy=true;
+    try{
+      const vw=video.videoWidth, vh=video.videoHeight;
+      const cw=Math.round(vw*.9), ch=Math.round(vh*.55);           // scan the band inside the guide box only
+      const sx=Math.round((vw-cw)/2), sy=Math.round((vh-ch)/2);
+      const scale=Math.min(1,1280/cw);
+      roi.width=Math.round(cw*scale); roi.height=Math.round(ch*scale);
+      rctx.drawImage(video,sx,sy,cw,ch,0,0,roi.width,roi.height);
+      const src=engineName.startsWith("ZXing")?rctx.getImageData(0,0,roi.width,roi.height):roi;
+      const res=await detector.detect(src);
+      const now=Date.now();
+      if(res&&res.length){
+        const r=res[0], v=String(r.rawValue||"").trim();
+        if(v){
+          if(!LINEAR.has(r.format)||(pend.v===v&&now-pend.t<600)){onCode(v,r.format);pend={v:"",t:0}}
+          else pend={v,t:now};
+        }
+      }else if(now-pend.t>600)pend={v:"",t:0};
+    }catch(e){}
+    busy=false;
+  }
+  if(video.requestVideoFrameCallback)video.requestVideoFrameCallback(tick);else requestAnimationFrame(tick);
+}
 async function startCam(){
   const m=$("camMsg");
-  if(!window.Html5Qrcode){note(m,"bad","โหลดตัวสแกนไม่สำเร็จ รีเฟรชหน้านี้");return}
   if(!window.isSecureContext){note(m,"bad","ต้องเปิดหน้านี้ผ่าน https เท่านั้นจึงจะใช้กล้องได้");return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){note(m,"bad","เบราว์เซอร์นี้เปิดกล้องไม่ได้ ลองใช้ Chrome หรือ Safari");return}
+  $("btnCam").disabled=true; note(m,"ok","กำลังเปิดกล้อง…");
   try{
-    qr=qr||new Html5Qrcode("reader",{verbose:false,formatsToSupport:formats(),experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
-    await qr.start({facingMode:"environment"},{fps:15,aspectRatio:1.333,
-      qrbox:(w,h)=>({width:Math.floor(Math.min(w*.88,420)),height:Math.floor(Math.min(h*.5,220))}),
-      videoConstraints:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}},
-      t=>onCode(t),()=>{});
-    running=true;$("btnCam").textContent="ปิดกล้อง";m.hidden=true;
-    try{const c=qr.getRunningTrackCapabilities();$("btnTorch").hidden=!(c&&c.torch)}catch(e){}
+    await getDetector();
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});
+    track=stream.getVideoTracks()[0];
+    try{const c=track.getCapabilities?track.getCapabilities():{};
+      const adv=[];if(c.focusMode&&c.focusMode.includes("continuous"))adv.push({focusMode:"continuous"});
+      if(adv.length)await track.applyConstraints({advanced:adv});
+      $("btnTorch").hidden=!c.torch;}catch(e){}
+    video.srcObject=stream; await video.play();
+    $("camBox").hidden=false; running=true; paused=false; $("btnCam").textContent="ปิดกล้อง";
+    $("engine").textContent="ตัวอ่าน: "+engineName;
+    m.hidden=true; tick();
     try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}
   }catch(e){
     const s=String(e&&(e.name||e.message||e));
-    note(m,"bad",/NotAllowed|Permission/i.test(s)?"ยังไม่ได้อนุญาตกล้อง: กดรูปแม่กุญแจข้างที่อยู่เว็บ แล้วอนุญาตกล้อง จากนั้นกดเปิดกล้องอีกครั้ง":"เปิดกล้องไม่ได้ ("+esc(s)+") ลองปิดแอปอื่นที่ใช้กล้องอยู่ แล้วลองใหม่");
-  }
+    note(m,"bad",s==="noengine"?"โหลดตัวอ่านบาร์โค้ดไม่สำเร็จ รีเฟรชหน้านี้":/NotAllowed|Permission/i.test(s)?"ยังไม่ได้อนุญาตกล้อง: กดรูปแม่กุญแจข้างที่อยู่เว็บ แล้วอนุญาตกล้อง จากนั้นกดเปิดกล้องอีกครั้ง":"เปิดกล้องไม่ได้ ("+esc(s)+") ลองปิดแอปอื่นที่ใช้กล้องอยู่ แล้วลองใหม่");
+    stopCam();
+  }finally{$("btnCam").disabled=false}
 }
-async function stopCam(){try{if(qr&&running)await qr.stop()}catch(e){}running=false;torch=false;$("btnCam").textContent="เปิดกล้องสแกน";$("btnTorch").hidden=true}
-function pauseCam(p){try{if(qr&&running){p?qr.pause(true):qr.resume()}}catch(e){}}
+function stopCam(){running=false;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}stream=null;track=null;torch=false;video.srcObject=null;$("camBox").hidden=true;$("btnCam").textContent="เปิดกล้องสแกน";$("btnTorch").hidden=true;$("btnTorch").textContent="ไฟฉาย"}
+function pauseCam(p){paused=p}
 $("btnCam").onclick=()=>running?stopCam():startCam();
-$("btnTorch").onclick=async()=>{try{torch=!torch;await qr.applyVideoConstraints({advanced:[{torch}]});$("btnTorch").textContent=torch?"ปิดไฟฉาย":"ไฟฉาย"}catch(e){toast("เครื่องนี้เปิดไฟฉายไม่ได้")}};
+$("btnTorch").onclick=async()=>{try{torch=!torch;await track.applyConstraints({advanced:[{torch}]});$("btnTorch").textContent=torch?"ปิดไฟฉาย":"ไฟฉาย"}catch(e){torch=false;toast("เครื่องนี้เปิดไฟฉายไม่ได้")}};
 document.addEventListener("visibilitychange",()=>{if(document.hidden&&running)stopCam()});
 
 // ---------- list ----------

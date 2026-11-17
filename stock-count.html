@@ -343,9 +343,9 @@ $("btnOcr").onclick=async()=>{
 };
 $("fileOcr").addEventListener("change",async()=>{
   const f=$("fileOcr").files[0]; if(!f)return; const m=$("scanMsg");
-  show(m,"ai",'<span class="spin"></span> AI กำลังอ่านฉลาก… (ประมาณ 5–15 วินาที)'); $("btnOcr").disabled=true;
+  show(m,"ai",'<span class="spin"></span> AI กำลังอ่านฉลาก… (โมเดลเร็ว ไม่กี่วินาที)'); $("btnOcr").disabled=true;
   try{
-    const r=await sample.json(OCR_PROMPT,{images:[f],cache:false});
+    const r=await sample.json(OCR_PROMPT,{images:[f],cache:false,modelTier:"quick"});
     if(!r||typeof r!=="object") throw {code:"invalid_json"};
     const unc=new Set(Array.isArray(r.uncertain)?r.uncertain.map(String):[]);
     aiFields.clear(); method="ai";
