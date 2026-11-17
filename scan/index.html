@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1f3a5a">
+<title>สแกนนับสต็อก</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<script src="html5-qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#eef1f4; --surface:#fff; --sunk:#e3e8ee; --line:#cdd5de; --fg:#17212b; --muted:#5a6878;
+  --accent:#e8a317; --accent-ink:#2a1d00; --ink:#1f3a5a; --ink-fg:#fff;
+  --ok:#1d7a46; --ok-bg:#dff3e7; --warn:#9a5b00; --warn-bg:#fff1d1; --bad:#b3261e; --bad-bg:#fde3e1;
+  --f-body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0f151c; --surface:#18212b; --sunk:#111922; --line:#2c3a48; --fg:#e6ecf2; --muted:#93a2b3;
+  --accent:#f2b134; --accent-ink:#241800; --ink:#8fb6e3; --ink-fg:#0b1520;
+  --ok:#5fd394; --ok-bg:#12321f; --warn:#f2b968; --warn-bg:#3a2a0e; --bad:#ff8a80; --bad-bg:#3d1714; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:16px;line-height:1.5;
+  padding:env(safe-area-inset-top,0px) max(12px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+header{display:flex;align-items:center;gap:10px;padding-top:10px}
+header h1{font-size:19px;margin:0;flex:1}
+.chip{font-size:12.5px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--sunk);color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{display:flex;flex-direction:column;gap:3px;font-size:12.5px;font-weight:600;color:var(--muted);min-width:0}
+input{font:inherit;font-size:16px;color:var(--fg);background:var(--sunk);border:1.5px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;min-width:0}
+input:focus{outline:none;border-color:var(--ink)}
+button{font:inherit;font-weight:600;font-size:15px;cursor:pointer;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);color:var(--fg);padding:9px 12px}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ink{background:var(--ink);border-color:var(--ink);color:var(--ink-fg)}
+.danger{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--sunk);padding:4px;border-radius:10px}
+.seg button{border:none;background:transparent;font-size:14px;padding:8px 4px}
+.seg button[aria-pressed="true"]{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+#reader{width:100%;border-radius:10px;overflow:hidden;background:#000;min-height:0}
+#reader video{width:100%!important;display:block}
+.camwrap{position:relative}
+.flash{position:absolute;inset:0;border-radius:10px;pointer-events:none;box-shadow:inset 0 0 0 6px var(--ok);opacity:0;transition:opacity .25s}
+.flash.on{opacity:1;transition:none}
+.camctl{display:flex;gap:8px}
+.camctl button{flex:1}
+.last{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center}
+.last .code{font-family:var(--f-mono);font-size:22px;font-weight:600;word-break:break-all}
+.last .tot{font-family:var(--f-mono);font-size:34px;font-weight:700;text-align:right;line-height:1}
+.last .tot small{display:block;font-family:var(--f-body);font-size:12px;font-weight:500;color:var(--muted)}
+.last .meta{grid-column:1/-1;font-size:13px;color:var(--muted)}
+.qbtns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.qbtns button{font-family:var(--f-mono);font-size:18px;padding:10px 0}
+.empty{color:var(--muted);text-align:center;font-size:14px;padding:12px}
+.note{border-radius:8px;padding:9px 11px;font-size:14px}
+.note.ok{background:var(--ok-bg);color:var(--ok)} .note.warn{background:var(--warn-bg);color:var(--warn)} .note.bad{background:var(--bad-bg);color:var(--bad)}
+ul{list-style:none;margin:0;padding:0}
+li.it{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:2px 10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+li.it:first-child{border-top:none}
+.it .c{font-family:var(--f-mono);font-weight:600;font-size:14.5px;word-break:break-all}
+.it .n{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.it .q{font-family:var(--f-mono);font-size:20px;font-weight:700;text-align:right}
+.it button{padding:6px 10px;font-size:13px}
+.stats{display:flex;gap:14px;font-size:13.5px;color:var(--muted);flex-wrap:wrap}
+.stats b{color:var(--fg);font-family:var(--f-mono);font-size:17px;margin-right:3px}
+.tools{display:flex;flex-wrap:wrap;gap:8px}.tools button{flex:1 1 140px}
+.sheet{position:fixed;inset:auto 0 0 0;z-index:30;background:var(--surface);border-top:2px solid var(--accent);border-radius:14px 14px 0 0;
+  padding:14px max(14px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));box-shadow:0 -6px 24px rgba(0,0,0,.25)}
+.sheet .in{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.sheet .big{font-family:var(--f-mono);font-size:30px;text-align:center;font-weight:700}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pad button{font-family:var(--f-mono);font-size:22px;padding:12px 0}
+.toast{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:40;background:var(--fg);color:var(--bg);padding:8px 16px;border-radius:999px;font-weight:600;max-width:calc(100% - 24px);text-align:center}
+.help{font-size:12.5px;color:var(--muted);margin:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>สแกนนับสต็อก</h1><span class="chip" id="saved">บันทึกในเครื่องแล้ว</span></header>
+
+  <section class="card">
+    <div class="row">
+      <label for="round">รอบนับ<input id="round" autocomplete="off"></label>
+      <label for="loc">ตำแหน่ง / โซน<input id="loc" autocomplete="off" placeholder="เช่น A-01"></label>
+    </div>
+    <div class="seg" role="group" aria-label="โหมดการนับ">
+      <button type="button" id="mPlus" aria-pressed="true">สแกน = +1 (เร็ว)</button>
+      <button type="button" id="mQty" aria-pressed="false">สแกนแล้วใส่จำนวน</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="camwrap"><div id="reader"></div><div class="flash" id="flash"></div></div>
+    <div class="camctl">
+      <button type="button" class="ink" id="btnCam">เปิดกล้องสแกน</button>
+      <button type="button" id="btnTorch" hidden>ไฟฉาย</button>
+    </div>
+    <div id="camMsg" class="note" hidden></div>
+    <label for="manual">พิมพ์รหัส / ใช้เครื่องยิงบาร์โค้ด<input id="manual" autocomplete="off" spellcheck="false" placeholder="พิมพ์แล้วกด Enter" style="font-family:var(--f-mono)"></label>
+  </section>
+
+  <section class="card" id="lastCard">
+    <div id="lastEmpty" class="empty">กดเปิดกล้องแล้วส่องบาร์โค้ด ระบบจะนับให้ทันทีพร้อมเสียงบี๊บ</div>
+    <div id="lastBox" hidden>
+      <div class="last">
+        <div class="code" id="lCode"></div>
+        <div class="tot" id="lTot"></div>
+        <div class="meta" id="lMeta"></div>
+      </div>
+      <label for="lName" style="margin-top:8px">ชื่อสินค้า (ใส่ครั้งเดียว จำไว้ให้)<input id="lName" autocomplete="off"></label>
+      <div class="qbtns" style="margin-top:8px">
+        <button type="button" data-d="-1">−1</button><button type="button" data-d="1">+1</button>
+        <button type="button" data-d="10">+10</button><button type="button" id="btnSet">ใส่ยอด</button>
+      </div>
+    </div>
+    <button type="button" id="btnUndo" disabled>ย้อนกลับครั้งล่าสุด</button>
+  </section>
+
+  <section class="card">
+    <div class="stats"><span><b id="sSku">0</b>รหัสสินค้า</span><span><b id="sQty">0</b>หน่วยรวม</span><span><b id="sScan">0</b>รายการ</span></div>
+    <input id="search" type="search" placeholder="ค้นหารหัส ชื่อ ตำแหน่ง" aria-label="ค้นหา">
+    <ul id="list"></ul>
+    <div class="tools">
+      <button type="button" class="primary" id="btnCsv">ดาวน์โหลด CSV</button>
+      <button type="button" id="btnShare">แชร์ไฟล์</button>
+      <button type="button" id="btnCopy">คัดลอกข้อมูล</button>
+    </div>
+    <div id="expMsg" class="note" hidden></div>
+    <p class="help">ข้อมูลเก็บในมือถือเครื่องนี้ (ใช้งานได้แม้ไม่มีเน็ต) นับเสร็จแล้วให้ดาวน์โหลดหรือแชร์ CSV ทุกครั้ง อย่าล้างข้อมูลเบราว์เซอร์ก่อนส่งออก</p>
+    <button type="button" class="danger" id="btnReset">ลบข้อมูลรอบนี้ทั้งหมด</button>
+  </section>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="in">
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><b id="shCode" style="font-family:var(--f-mono);word-break:break-all"></b><span id="shTitle" style="font-size:13px;color:var(--muted)">จำนวนที่นับได้</span></div>
+    <div class="big" id="shVal">0</div>
+    <div class="pad" id="pad">
+      <button type="button">1</button><button type="button">2</button><button type="button">3</button>
+      <button type="button">4</button><button type="button">5</button><button type="button">6</button>
+      <button type="button">7</button><button type="button">8</button><button type="button">9</button>
+      <button type="button">.</button><button type="button">0</button><button type="button">⌫</button>
+    </div>
+    <div class="row"><button type="button" id="shCancel">ยกเลิก</button><button type="button" class="primary" id="shOk">บันทึก</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const KEY="scanstock.v1";
+const load=()=>{try{return JSON.parse(localStorage.getItem(KEY))||null}catch(e){return null}};
+let S=load()||{entries:[],names:{},round:"",loc:"",mode:"plus"};
+// entries: {id, code, qty, loc, round, at}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S));$("saved").textContent="บันทึกในเครื่องแล้ว";$("saved").style.color=""}catch(e){$("saved").textContent="บันทึกไม่สำเร็จ!";$("saved").style.color="var(--bad)"}};
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+if(!S.round) S.round="นับสต็อก "+new Date().toLocaleDateString("th-TH");
+$("round").value=S.round; $("loc").value=S.loc||"";
+$("round").onchange=()=>{S.round=$("round").value.trim();save();render()};
+$("loc").onchange=()=>{S.loc=$("loc").value.trim();save()};
+
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=n=>Number(n).toLocaleString("th-TH",{maximumFractionDigits:3});
+let tt;const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1400)};
+const note=(el,cls,html)=>{el.className="note "+cls;el.innerHTML=html;el.hidden=false};
+let ac;function beep(ok){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=ok?1500:300;g.gain.value=.15;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(ok?.07:.25))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?35:[80,50,80])}catch(e){}}
+function flash(){const f=$("flash");f.classList.add("on");setTimeout(()=>f.classList.remove("on"),120)}
+
+function setMode(m){S.mode=m;save();$("mPlus").setAttribute("aria-pressed",m==="plus");$("mQty").setAttribute("aria-pressed",m==="qty")}
+$("mPlus").onclick=()=>setMode("plus");$("mQty").onclick=()=>setMode("qty");setMode(S.mode||"plus");
+
+const roundE=()=>S.entries.filter(e=>e.round===S.round);
+const totalOf=code=>roundE().filter(e=>e.code===code).reduce((s,e)=>s+e.qty,0);
+let lastCode=null, undoStack=[];
+
+function add(code,qty){
+  code=String(code).trim(); if(!code)return;
+  const loc=S.loc||"";
+  const last=S.entries[S.entries.length-1];
+  // merge consecutive +1 scans of the same code at the same spot into one row
+  if(last&&last.code===code&&last.loc===loc&&last.round===S.round&&Date.now()-last.at<10*60*1000&&qty>0&&S.mode==="plus"){
+    last.qty=Math.round((last.qty+qty)*1000)/1000; last.at=Date.now(); undoStack.push({type:"inc",id:last.id,d:qty});
+  }else{
+    const e={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),code,qty,loc,round:S.round,at:Date.now()};
+    S.entries.push(e); undoStack.push({type:"add",id:e.id});
+  }
+  lastCode=code; save(); render(); showLast();
+}
+function adjust(d){ if(!lastCode)return; const loc=S.loc||"";
+  if(d<0&&totalOf(lastCode)+d<0){beep(false);toast("ยอดติดลบไม่ได้");return}
+  const e={id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),code:lastCode,qty:d,loc,round:S.round,at:Date.now(),adj:true};
+  S.entries.push(e);undoStack.push({type:"add",id:e.id});save();render();showLast();beep(true)}
+$("btnUndo").onclick=()=>{
+  const u=undoStack.pop(); if(!u)return;
+  const i=S.entries.findIndex(e=>e.id===u.id);
+  if(i>=0){ if(u.type==="inc"){S.entries[i].qty=Math.round((S.entries[i].qty-u.d)*1000)/1000; if(S.entries[i].qty<=0)S.entries.splice(i,1)} else S.entries.splice(i,1) }
+  save();render();showLast();toast("ย้อนกลับแล้ว");
+};
+function showLast(){
+  $("btnUndo").disabled=!undoStack.length;
+  if(!lastCode){$("lastEmpty").hidden=false;$("lastBox").hidden=true;return}
+  $("lastEmpty").hidden=true;$("lastBox").hidden=false;
+  $("lCode").textContent=lastCode;
+  $("lTot").innerHTML=fmt(totalOf(lastCode))+"<small>ยอดรวมรอบนี้</small>";
+  const n=S.names[lastCode]||"";
+  if(document.activeElement!==$("lName")) $("lName").value=n;
+  $("lMeta").textContent=(n||"ยังไม่มีชื่อสินค้า")+" · ตำแหน่ง "+(S.loc||"ไม่ระบุ");
+}
+$("lName").onchange=()=>{if(lastCode){S.names[lastCode]=$("lName").value.trim();save();render();showLast()}};
+document.querySelectorAll(".qbtns button[data-d]").forEach(b=>b.onclick=()=>adjust(Number(b.dataset.d)));
+
+// ---------- quantity sheet ----------
+let sheetCode=null, sheetMode="add", val="";
+function openSheet(code,mode){sheetCode=code;sheetMode=mode;val="";$("shCode").textContent=code;
+  $("shTitle").textContent=mode==="set"?"แก้ยอดรวมเป็น (ยอดเดิม "+fmt(totalOf(code))+")":"จำนวนที่นับได้ (ยอดเดิม "+fmt(totalOf(code))+")";
+  $("shVal").textContent="0";$("sheet").hidden=false;pauseCam(true)}
+function closeSheet(){$("sheet").hidden=true;sheetCode=null;pauseCam(false)}
+$("pad").onclick=ev=>{const b=ev.target.closest("button");if(!b)return;const k=b.textContent;
+  if(k==="⌫")val=val.slice(0,-1);else if(k==="."){if(!val.includes("."))val=(val||"0")+"."}else if(val.length<9)val=(val==="0"?"":val)+k;
+  $("shVal").textContent=val||"0"};
+$("shCancel").onclick=closeSheet;
+$("shOk").onclick=()=>{const n=Number(val||"0");if(!Number.isFinite(n)){beep(false);return}
+  if(n>100000){toast("จำนวนมากผิดปกติ ตรวจอีกครั้ง");beep(false);return}
+  const code=sheetCode;
+  if(sheetMode==="set"){lastCode=code;const d=Math.round((n-totalOf(code))*1000)/1000;if(d!==0)adjust(d)}
+  else{if(n<=0){toast("ใส่จำนวนมากกว่า 0");beep(false);return}const m=S.mode;S.mode="qty";add(code,n);S.mode=m;save();beep(true)}
+  closeSheet();toast("บันทึก "+code+" × "+fmt(n));};
+$("btnSet").onclick=()=>{if(lastCode)openSheet(lastCode,"set")};
+
+// ---------- scanning ----------
+let lastHit={code:"",t:0};
+function onCode(code){
+  code=String(code).trim(); if(!code)return;
+  const now=Date.now();
+  // Count the same barcode again only after it has left the camera view (no sighting for 800 ms).
+  // Holding one item in front of the camera therefore never double-counts.
+  const seenRecently=code===lastHit.code&&now-lastHit.t<800;
+  lastHit={code,t:now};
+  if(seenRecently)return;
+  if(!$("sheet").hidden)return;
+  flash();
+  if(S.mode==="qty"){beep(true);lastCode=code;showLast();openSheet(code,"add")}
+  else{beep(true);add(code,1);toast((S.names[code]||code)+"  +1  = "+fmt(totalOf(code)))}
+}
+$("manual").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();const v=$("manual").value;$("manual").value="";lastHit={code:"",t:0};onCode(v)}});
+
+let qr=null, running=false, torch=false;
+function formats(){const F=window.Html5QrcodeSupportedFormats;if(!F)return undefined;
+  return ["EAN_13","EAN_8","UPC_A","UPC_E","CODE_128","CODE_39","CODE_93","ITF","CODABAR","QR_CODE","DATA_MATRIX"].map(k=>F[k]).filter(v=>v!==undefined)}
+async function startCam(){
+  const m=$("camMsg");
+  if(!window.Html5Qrcode){note(m,"bad","โหลดตัวสแกนไม่สำเร็จ รีเฟรชหน้านี้");return}
+  if(!window.isSecureContext){note(m,"bad","ต้องเปิดหน้านี้ผ่าน https เท่านั้นจึงจะใช้กล้องได้");return}
+  try{
+    qr=qr||new Html5Qrcode("reader",{verbose:false,formatsToSupport:formats(),experimentalFeatures:{useBarCodeDetectorIfSupported:true}});
+    await qr.start({facingMode:"environment"},{fps:15,aspectRatio:1.333,
+      qrbox:(w,h)=>({width:Math.floor(Math.min(w*.88,420)),height:Math.floor(Math.min(h*.5,220))}),
+      videoConstraints:{facingMode:"environment",width:{ideal:1280},height:{ideal:720}}},
+      t=>onCode(t),()=>{});
+    running=true;$("btnCam").textContent="ปิดกล้อง";m.hidden=true;
+    try{const c=qr.getRunningTrackCapabilities();$("btnTorch").hidden=!(c&&c.torch)}catch(e){}
+    try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}
+  }catch(e){
+    const s=String(e&&(e.name||e.message||e));
+    note(m,"bad",/NotAllowed|Permission/i.test(s)?"ยังไม่ได้อนุญาตกล้อง: กดรูปแม่กุญแจข้างที่อยู่เว็บ แล้วอนุญาตกล้อง จากนั้นกดเปิดกล้องอีกครั้ง":"เปิดกล้องไม่ได้ ("+esc(s)+") ลองปิดแอปอื่นที่ใช้กล้องอยู่ แล้วลองใหม่");
+  }
+}
+async function stopCam(){try{if(qr&&running)await qr.stop()}catch(e){}running=false;torch=false;$("btnCam").textContent="เปิดกล้องสแกน";$("btnTorch").hidden=true}
+function pauseCam(p){try{if(qr&&running){p?qr.pause(true):qr.resume()}}catch(e){}}
+$("btnCam").onclick=()=>running?stopCam():startCam();
+$("btnTorch").onclick=async()=>{try{torch=!torch;await qr.applyVideoConstraints({advanced:[{torch}]});$("btnTorch").textContent=torch?"ปิดไฟฉาย":"ไฟฉาย"}catch(e){toast("เครื่องนี้เปิดไฟฉายไม่ได้")}};
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&running)stopCam()});
+
+// ---------- list ----------
+function summary(){const g=new Map();for(const e of roundE()){const s=g.get(e.code)||{code:e.code,qty:0,n:0,locs:new Set()};s.qty+=e.qty;if(!e.adj)s.n++;if(e.loc)s.locs.add(e.loc);g.set(e.code,s)}
+  return [...g.values()].map(s=>(s.qty=Math.round(s.qty*1000)/1000,s)).sort((a,b)=>a.code.localeCompare(b.code))}
+let confirmCode=null;
+function render(){
+  const sum=summary(), q=$("search").value.trim().toLowerCase();
+  $("sSku").textContent=fmt(sum.length);$("sQty").textContent=fmt(sum.reduce((a,s)=>a+s.qty,0));$("sScan").textContent=fmt(sum.reduce((a,s)=>a+s.n,0));
+  const rows=sum.filter(s=>!q||s.code.toLowerCase().includes(q)||(S.names[s.code]||"").toLowerCase().includes(q)||[...s.locs].some(l=>l.toLowerCase().includes(q)));
+  const ul=$("list");
+  if(!sum.length){ul.innerHTML='<li class="empty">ยังไม่มีรายการในรอบนี้</li>';return}
+  ul.innerHTML=rows.map(s=>`<li class="it"><div style="min-width:0"><div class="c">${esc(s.code)}</div><div class="n">${esc(S.names[s.code]||"")}${S.names[s.code]?" · ":""}${esc([...s.locs].join(", ")||"ไม่ระบุตำแหน่ง")}</div></div>
+    <div class="q">${fmt(s.qty)}</div>
+    <div style="display:flex;gap:6px">${confirmCode===s.code?`<button type="button" class="danger" data-del="${esc(s.code)}">ยืนยันลบ</button><button type="button" data-cancel="1">ไม่ลบ</button>`:`<button type="button" data-pick="${esc(s.code)}">แก้</button><button type="button" data-ask="${esc(s.code)}">ลบ</button>`}</div></li>`).join("")||'<li class="empty">ไม่พบรายการ</li>';
+}
+$("search").oninput=render;
+$("list").onclick=ev=>{const b=ev.target.closest("button");if(!b)return;
+  if(b.dataset.pick){lastCode=b.dataset.pick;confirmCode=null;render();showLast();$("lastCard").scrollIntoView({behavior:"smooth"});toast("เลือก "+lastCode+": กด −1/+1 หรือใส่ยอด")}
+  else if(b.dataset.ask){confirmCode=b.dataset.ask;render()}
+  else if(b.dataset.cancel){confirmCode=null;render()}
+  else if(b.dataset.del){const c=b.dataset.del;S.entries=S.entries.filter(e=>!(e.round===S.round&&e.code===c));if(lastCode===c)lastCode=null;confirmCode=null;undoStack=[];save();render();showLast();toast("ลบ "+c+" แล้ว")}};
+
+let resetArm=false;
+$("btnReset").onclick=()=>{if(!resetArm){resetArm=true;$("btnReset").textContent="กดอีกครั้งเพื่อยืนยันลบทั้งหมด";setTimeout(()=>{resetArm=false;$("btnReset").textContent="ลบข้อมูลรอบนี้ทั้งหมด"},4000);return}
+  S.entries=S.entries.filter(e=>e.round!==S.round);lastCode=null;undoStack=[];resetArm=false;$("btnReset").textContent="ลบข้อมูลรอบนี้ทั้งหมด";save();render();showLast();toast("ลบรอบนี้แล้ว")};
+
+// ---------- export ----------
+function csvText(tsv){const cell=v=>{const s=String(v??"");return /[",\n\r]/.test(s)||/^[=+\-@]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+  const rows=[["รอบนับ","รหัสสินค้า","ชื่อสินค้า","จำนวนรวม","จำนวนครั้งที่สแกน","ตำแหน่ง"],...summary().map(s=>[S.round,s.code,S.names[s.code]||"",s.qty,s.n,[...s.locs].join(" / ")])];
+  return tsv?rows.map(r=>r.map(v=>String(v??"").replace(/[\t\r\n]+/g," ")).join("\t")).join("\n"):rows.map(r=>r.map(cell).join(",")).join("\r\n")}
+const fname=()=>(S.round||"stock").replace(/[\\/:*?"<>|\s]+/g,"_")+".csv";
+$("btnCsv").onclick=()=>{const blob=new Blob(["﻿"+csvText()],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=fname();document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);note($("expMsg"),"ok","ดาวน์โหลด "+esc(fname())+" แล้ว เปิดด้วย Excel หรือ Google Sheets ได้")};
+$("btnShare").onclick=async()=>{try{const f=new File(["﻿"+csvText()],fname(),{type:"text/csv"});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:S.round});note($("expMsg"),"ok","แชร์แล้ว")}
+  else note($("expMsg"),"warn","เครื่องนี้แชร์ไฟล์ไม่ได้ ใช้ปุ่มดาวน์โหลด CSV แทน")}catch(e){if(e&&e.name!=="AbortError")note($("expMsg"),"bad","แชร์ไม่สำเร็จ")}};
+$("btnCopy").onclick=async()=>{try{await navigator.clipboard.writeText(csvText(true));note($("expMsg"),"ok","คัดลอกแล้ว วางใน Excel / Google Sheets / LINE ได้")}catch(e){note($("expMsg"),"bad","คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดแทน")}};
+
+render();showLast();
+window.addEventListener("beforeunload",save);
+})();
+</script>
+</body>
+</html>
