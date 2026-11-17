@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#1f3a5a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="สแกนสต็อก">
 <title>สแกนนับสต็อก</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -98,9 +101,10 @@ li.it:first-child{border-top:none}
   </section>
 
   <section class="card">
-    <div class="camwrap" id="camBox" hidden><video id="video" playsinline muted autoplay></video><div class="guide" aria-hidden="true"></div><div class="flash" id="flash"></div><span class="engine" id="engine"></span></div>
+    <div class="camwrap" id="camBox" hidden><video id="video" playsinline webkit-playsinline muted autoplay></video><div class="guide" aria-hidden="true"></div><div class="flash" id="flash"></div><span class="engine" id="engine"></span></div>
     <div class="camctl">
       <button type="button" class="ink" id="btnCam">เปิดกล้องสแกน</button>
+      <button type="button" id="btnSwitch" hidden>สลับกล้อง</button>
       <button type="button" id="btnTorch" hidden>ไฟฉาย</button>
     </div>
     <div id="camMsg" class="note" hidden></div>
@@ -134,6 +138,7 @@ li.it:first-child{border-top:none}
       <button type="button" id="btnCopy">คัดลอกข้อมูล</button>
     </div>
     <div id="expMsg" class="note" hidden></div>
+    <p class="help" id="iosTip" hidden>iPhone: ถ้าบาร์โค้ดเบลอเมื่ออยู่ใกล้ ให้ถอยมือถือออกประมาณ 15–20 ซม. หรือกด "สลับกล้อง" เพื่อเลือกเลนส์ที่โฟกัสใกล้ได้ กด แชร์ → เพิ่มไปยังหน้าจอโฮม เพื่อเปิดเหมือนแอป</p>
     <p class="help">ข้อมูลเก็บในมือถือเครื่องนี้ (ใช้งานได้แม้ไม่มีเน็ต) นับเสร็จแล้วให้ดาวน์โหลดหรือแชร์ CSV ทุกครั้ง อย่าล้างข้อมูลเบราว์เซอร์ก่อนส่งออก</p>
     <button type="button" class="danger" id="btnReset">ลบข้อมูลรอบนี้ทั้งหมด</button>
   </section>
@@ -173,7 +178,8 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const fmt=n=>Number(n).toLocaleString("th-TH",{maximumFractionDigits:3});
 let tt;const toast=m=>{const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1400)};
 const note=(el,cls,html)=>{el.className="note "+cls;el.innerHTML=html;el.hidden=false};
-let ac;function beep(ok){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=ok?1500:300;g.gain.value=.15;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(ok?.07:.25))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?35:[80,50,80])}catch(e){}}
+let ac;function unlockAudio(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();const b=ac.createBuffer(1,1,22050),s=ac.createBufferSource();s.buffer=b;s.connect(ac.destination);s.start(0)}catch(e){}}
+function beep(ok){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==="suspended")ac.resume();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=ok?1500:300;g.gain.value=.15;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+(ok?.07:.25))}catch(e){}try{navigator.vibrate&&navigator.vibrate(ok?35:[80,50,80])}catch(e){}}
 function flash(){const f=$("flash");f.classList.add("on");setTimeout(()=>f.classList.remove("on"),120)}
 
 function setMode(m){S.mode=m;save();$("mPlus").setAttribute("aria-pressed",m==="plus");$("mQty").setAttribute("aria-pressed",m==="qty")}
@@ -259,6 +265,7 @@ $("manual").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault(
 // 2) Otherwise ZXing-C++ compiled to WebAssembly (iPhone / desktop), served from this folder so it works offline.
 const FORMATS=["ean_13","ean_8","upc_a","upc_e","code_128","code_39","code_93","itf","codabar","qr_code","data_matrix"];
 const LINEAR=new Set(["ean_13","ean_8","upc_a","upc_e","code_128","code_39","code_93","itf","codabar"]);
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
 let detector=null, engineName="", stream=null, track=null, running=false, paused=false, torch=false, busy=false;
 const video=$("video"), roi=document.createElement("canvas"), rctx=roi.getContext("2d",{willReadFrequently:true});
 async function getDetector(){
@@ -312,26 +319,50 @@ async function startCam(){
   $("btnCam").disabled=true; note(m,"ok","กำลังเปิดกล้อง…");
   try{
     await getDetector();
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}}});
+    const v={width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}};
+    if(camId)v.deviceId={exact:camId};else v.facingMode={ideal:"environment"};
+    try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:v})}
+    catch(err){ if(camId&&/Overconstrained|NotFound/i.test(String(err&&err.name))){camId="";try{localStorage.removeItem("scanstock.cam")}catch(e){};stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"}}})} else throw err }
     track=stream.getVideoTracks()[0];
     try{const c=track.getCapabilities?track.getCapabilities():{};
       const adv=[];if(c.focusMode&&c.focusMode.includes("continuous"))adv.push({focusMode:"continuous"});
       if(adv.length)await track.applyConstraints({advanced:adv});
       $("btnTorch").hidden=!c.torch;}catch(e){}
+    video.setAttribute("playsinline","");video.muted=true;
     video.srcObject=stream; await video.play();
+    listBackCams();
     $("camBox").hidden=false; running=true; paused=false; $("btnCam").textContent="ปิดกล้อง";
     $("engine").textContent="ตัวอ่าน: "+engineName;
     m.hidden=true; tick();
     try{navigator.wakeLock&&navigator.wakeLock.request("screen").catch(()=>{})}catch(e){}
   }catch(e){
     const s=String(e&&(e.name||e.message||e));
-    note(m,"bad",s==="noengine"?"โหลดตัวอ่านบาร์โค้ดไม่สำเร็จ รีเฟรชหน้านี้":/NotAllowed|Permission/i.test(s)?"ยังไม่ได้อนุญาตกล้อง: กดรูปแม่กุญแจข้างที่อยู่เว็บ แล้วอนุญาตกล้อง จากนั้นกดเปิดกล้องอีกครั้ง":"เปิดกล้องไม่ได้ ("+esc(s)+") ลองปิดแอปอื่นที่ใช้กล้องอยู่ แล้วลองใหม่");
+    note(m,"bad",s==="noengine"?"โหลดตัวอ่านบาร์โค้ดไม่สำเร็จ รีเฟรชหน้านี้":/NotAllowed|Permission/i.test(s)?(IOS?"ยังไม่ได้อนุญาตกล้อง: กด <b>aA</b> ที่ช่องที่อยู่เว็บ → ตั้งค่าเว็บไซต์ → กล้อง → อนุญาต (หรือ การตั้งค่า → Safari → กล้อง → อนุญาต) แล้วกดเปิดกล้องอีกครั้ง":"ยังไม่ได้อนุญาตกล้อง: กดรูปแม่กุญแจข้างที่อยู่เว็บ แล้วอนุญาตกล้อง จากนั้นกดเปิดกล้องอีกครั้ง"):"เปิดกล้องไม่ได้ ("+esc(s)+") ลองปิดแอปอื่นที่ใช้กล้องอยู่ แล้วลองใหม่");
     stopCam();
   }finally{$("btnCam").disabled=false}
 }
 function stopCam(){running=false;try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}stream=null;track=null;torch=false;video.srcObject=null;$("camBox").hidden=true;$("btnCam").textContent="เปิดกล้องสแกน";$("btnTorch").hidden=true;$("btnTorch").textContent="ไฟฉาย"}
 function pauseCam(p){paused=p}
-$("btnCam").onclick=()=>running?stopCam():startCam();
+$("btnCam").onclick=()=>{unlockAudio();running?stopCam():startCam()};
+// Back-camera choice: iPhones list several back lenses; some focus closer than others.
+let camId=(()=>{try{return localStorage.getItem("scanstock.cam")||""}catch(e){return ""}})(), backCams=[];
+async function listBackCams(){
+  try{const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==="videoinput");
+    backCams=all.filter(d=>!/front|หน้า|facetime|user/i.test(d.label));
+    $("btnSwitch").hidden=backCams.length<2;
+    const cur=track&&track.getSettings?track.getSettings().deviceId:"";
+    const c=backCams.find(d=>d.deviceId===cur);
+    $("engine").textContent="ตัวอ่าน: "+engineName+(c&&c.label&&backCams.length>1?" · "+c.label:"");
+  }catch(e){}
+}
+$("btnSwitch").onclick=async()=>{
+  if(backCams.length<2)return;
+  const cur=track&&track.getSettings?track.getSettings().deviceId:camId;
+  const i=backCams.findIndex(d=>d.deviceId===cur);
+  camId=backCams[(i+1)%backCams.length].deviceId;
+  try{localStorage.setItem("scanstock.cam",camId)}catch(e){}
+  stopCam(); await startCam();
+};
 $("btnTorch").onclick=async()=>{try{torch=!torch;await track.applyConstraints({advanced:[{torch}]});$("btnTorch").textContent=torch?"ปิดไฟฉาย":"ไฟฉาย"}catch(e){torch=false;toast("เครื่องนี้เปิดไฟฉายไม่ได้")}};
 document.addEventListener("visibilitychange",()=>{if(document.hidden&&running)stopCam()});
 
@@ -371,6 +402,7 @@ $("btnShare").onclick=async()=>{try{const f=new File(["﻿"+csvText()],fname(),{
   else note($("expMsg"),"warn","เครื่องนี้แชร์ไฟล์ไม่ได้ ใช้ปุ่มดาวน์โหลด CSV แทน")}catch(e){if(e&&e.name!=="AbortError")note($("expMsg"),"bad","แชร์ไม่สำเร็จ")}};
 $("btnCopy").onclick=async()=>{try{await navigator.clipboard.writeText(csvText(true));note($("expMsg"),"ok","คัดลอกแล้ว วางใน Excel / Google Sheets / LINE ได้")}catch(e){note($("expMsg"),"bad","คัดลอกไม่ได้ ใช้ปุ่มดาวน์โหลดแทน")}};
 
+if(IOS)$("iosTip").hidden=false;
 render();showLast();
 window.addEventListener("beforeunload",save);
 })();
