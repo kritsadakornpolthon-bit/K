@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Night Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Night Desk: paper-trading signal desk for fixed-time (up/down) trades.
+   Layout follows the reference video: header with balance, equity curve, agent orbit, position chart + live log. */
+:root{
+  --bg:#f1f3f5; --surface:#ffffff; --sunk:#f6f8fa; --line:#e1e6eb; --line2:#cfd6de;
+  --fg:#141b22; --muted:#66727f; --faint:#9aa5b1;
+  --up:#16a34a; --up-bg:#e3f6ea; --down:#dc2626; --down-bg:#fde6e6; --tie:#6b7280; --tie-bg:#eceef1;
+  --brand:#16a34a; --warn:#b45309; --warn-bg:#fff3d6;
+  --a-trend:#2563eb; --a-mom:#0891b2; --a-rev:#db2777; --a-macd:#ea580c;
+  --a-candle:#ca8a04; --a-vol:#9333ea; --a-size:#7c3aed; --a-guard:#dc2626;
+  --f-body:"IBM Plex Sans Thai",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:16px; color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1116; --surface:#141b22; --sunk:#10161c; --line:#232d38; --line2:#2e3a47;
+  --fg:#e7edf3; --muted:#93a1b0; --faint:#5f6d7b;
+  --up:#4ade80; --up-bg:#0f2e1c; --down:#f87171; --down-bg:#3a1515; --tie:#9ca3af; --tie-bg:#222a33;
+  --brand:#4ade80; --warn:#fbbf24; --warn-bg:#352708;
+  --a-trend:#60a5fa; --a-mom:#22d3ee; --a-rev:#f472b6; --a-macd:#fb923c;
+  --a-candle:#facc15; --a-vol:#c084fc; --a-size:#a78bfa; --a-guard:#f87171; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1116; --surface:#141b22; --sunk:#10161c; --line:#232d38; --line2:#2e3a47;
+  --fg:#e7edf3; --muted:#93a1b0; --faint:#5f6d7b;
+  --up:#4ade80; --up-bg:#0f2e1c; --down:#f87171; --down-bg:#3a1515; --tie:#9ca3af; --tie-bg:#222a33;
+  --brand:#4ade80; --warn:#fbbf24; --warn-bg:#352708;
+  --a-trend:#60a5fa; --a-mom:#22d3ee; --a-rev:#f472b6; --a-macd:#fb923c;
+  --a-candle:#facc15; --a-vol:#c084fc; --a-size:#a78bfa; --a-guard:#f87171; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 48px max(16px,env(safe-area-inset-left))}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1120px;margin:0 auto;display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0}
+.lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;gap:8px;align-items:baseline;justify-content:space-between}
+.lbl small{letter-spacing:.02em;text-transform:none;color:var(--faint);font-size:11px}
+button{font:inherit;cursor:pointer}
+
+/* header */
+.top{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.logo{width:52px;height:52px;border-radius:14px;background:linear-gradient(145deg,#2b333c,#0d1116);display:grid;place-items:center;flex:none;box-shadow:0 4px 14px #0003}
+.logo svg{width:34px;height:34px}
+.ttl{flex:1;min-width:200px}
+.ttl h1{margin:0;font-size:24px;line-height:1.1;letter-spacing:-.01em}
+.ttl h1 b{color:var(--brand)}
+.sub{font-family:var(--f-mono);font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:4px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--brand);margin-right:4px;vertical-align:1px;animation:pulse 1.6s infinite}
+.dot.sim{background:var(--warn)} .dot.off{background:var(--faint);animation:none}
+@keyframes pulse{50%{opacity:.35}}
+.bal{text-align:right;margin-left:auto}
+.bal .big{font-family:var(--f-mono);font-size:34px;font-weight:600;line-height:1}
+.bal .meta{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-top:6px}
+.up{color:var(--up)} .down{color:var(--down)} .muted{color:var(--muted)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn{border:1px solid var(--line2);background:var(--surface);color:var(--fg);border-radius:10px;padding:8px 12px;font-size:14px;min-height:40px}
+.btn.pri{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn:disabled{opacity:.5;cursor:default}
+.paper{font-size:12.5px;color:var(--warn);background:var(--warn-bg);border-radius:10px;padding:8px 12px;margin-top:12px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.stat{background:var(--sunk);border-radius:12px;padding:10px 12px}
+.stat .k{font-size:12px;color:var(--muted)}
+.stat .v{font-family:var(--f-mono);font-size:20px;font-weight:600}
+.stat .n{font-size:11.5px;color:var(--faint)}
+
+/* equity */
+#equity{width:100%;height:150px;display:block}
+
+/* orbit */
+.orbit{position:relative;aspect-ratio:16/9.5;max-height:520px;margin:0 auto;width:100%}
+.orbit svg.wires{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.wire{stroke:var(--line2);stroke-width:1;stroke-dasharray:3 4;fill:none;vector-effect:non-scaling-stroke}
+.wire.hot{stroke-width:2.2;stroke-dasharray:6 5;animation:flow .6s linear infinite}
+@keyframes flow{to{stroke-dashoffset:-22}}
+.ring{fill:none;stroke:var(--line);stroke-dasharray:2 5;vector-effect:non-scaling-stroke}
+.agent{position:absolute;transform:translate(-50%,-50%);width:25%;max-width:250px;background:var(--surface);border:1px solid var(--line);
+  border-radius:14px;padding:8px 10px;display:flex;gap:9px;align-items:center;box-shadow:0 2px 8px #0000000d;transition:box-shadow .25s,border-color .25s}
+.agent.hot{border-color:var(--c);box-shadow:0 0 0 3px color-mix(in srgb,var(--c) 22%,transparent)}
+.agent .ic{width:30px;height:30px;border-radius:9px;background:var(--c);color:#fff;display:grid;place-items:center;flex:none;font-family:var(--f-mono);font-weight:600;font-size:13px}
+.agent .nm{font-family:var(--f-mono);font-size:12.5px;font-weight:600;color:var(--c);letter-spacing:.04em;line-height:1.15}
+.agent .ds{font-size:11px;color:var(--muted);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent .tx{min-width:0;flex:1}
+.vote{font-family:var(--f-mono);font-size:11.5px;font-weight:600;border-radius:7px;padding:2px 6px;flex:none;background:var(--tie-bg);color:var(--tie)}
+.vote.u{background:var(--up-bg);color:var(--up)} .vote.d{background:var(--down-bg);color:var(--down)} .vote.x{background:var(--warn-bg);color:var(--warn)}
+.core{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:grid;justify-items:center;gap:6px;text-align:center}
+.core .disc{width:92px;height:92px;border-radius:50%;background:var(--surface);border:3px solid var(--fg);display:grid;place-items:center;box-shadow:0 0 0 10px color-mix(in srgb,var(--brand) 10%,transparent),0 0 0 22px color-mix(in srgb,var(--brand) 5%,transparent)}
+.core .disc .logo{width:58px;height:58px;box-shadow:none}
+.core .dec{font-family:var(--f-mono);font-size:13px;font-weight:600;background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:3px 9px;white-space:nowrap}
+.core .cap{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.14em;color:var(--muted)}
+
+/* bottom */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#candles{width:100%;height:280px;display:block}
+.pos-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-family:var(--f-mono);font-size:12.5px;margin-top:8px}
+.chip{border-radius:8px;padding:3px 8px;background:var(--sunk);font-weight:600}
+.chip.u{background:var(--up-bg);color:var(--up)} .chip.d{background:var(--down-bg);color:var(--down)}
+.log{list-style:none;margin:0;padding:0;max-height:330px;overflow:auto}
+.log li{display:grid;grid-template-columns:44px 58px 1fr auto;gap:8px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line)}
+.log .t{font-family:var(--f-mono);font-size:11.5px;color:var(--faint)}
+.tag{font-family:var(--f-mono);font-size:10.5px;font-weight:600;text-align:center;border-radius:6px;padding:2px 0;background:var(--tie-bg);color:var(--tie)}
+.tag.win,.tag.up{background:var(--up-bg);color:var(--up)} .tag.loss,.tag.down{background:var(--down-bg);color:var(--down)} .tag.warn{background:var(--warn-bg);color:var(--warn)}
+.log .m b{font-family:var(--f-mono);font-size:13px}
+.log .m div{font-size:11.5px;color:var(--muted)}
+.log .amt{font-family:var(--f-mono);font-size:13px;font-weight:600;text-align:right}
+
+/* signal toast */
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translate(-50%,140%);transition:transform .3s;z-index:20;
+  background:var(--fg);color:var(--bg);border-radius:14px;padding:12px 18px;font-weight:600;box-shadow:0 10px 30px #0004;max-width:calc(100vw - 32px);text-align:center}
+.toast.on{transform:translate(-50%,0)}
+
+/* settings + backtest */
+dialog{border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--fg);padding:0;width:min(560px,calc(100vw - 24px));max-height:calc(100dvh - 24px)}
+dialog::backdrop{background:#0007}
+.dlg{padding:18px;display:grid;gap:12px}
+.dlg h2{margin:0;font-size:18px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted)}
+label.f input,label.f select{font:inherit;font-size:16px;color:var(--fg);background:var(--sunk);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;min-height:42px;width:100%}
+label.chk{display:flex;gap:8px;align-items:center;font-size:14px}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.bt-res table{width:100%;border-collapse:collapse;font-size:13px}
+.bt-res td,.bt-res th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-mono)}
+.bt-res td:first-child,.bt-res th:first-child{text-align:left;font-family:var(--f-body)}
+.verdict{border-radius:12px;padding:10px 12px;font-size:14px}
+.verdict.good{background:var(--up-bg);color:var(--up)} .verdict.bad{background:var(--down-bg);color:var(--down)}
+.row-end{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+
+/* narrow: orbit becomes a list with the core on top */
+@media (max-width:760px){
+  .stats{grid-template-columns:1fr 1fr}
+  .duo{grid-template-columns:1fr}
+  .orbit{aspect-ratio:auto;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+  .orbit svg.wires{display:none}
+  .core{position:static;transform:none;grid-column:1/-1;grid-template-columns:auto 1fr;justify-items:start;text-align:left;align-items:center;padding:4px 0 8px;gap:4px 14px}
+  .core .disc{width:64px;height:64px;grid-row:span 2;box-shadow:0 0 0 6px color-mix(in srgb,var(--brand) 10%,transparent)}
+  .core .disc .logo{width:42px;height:42px}
+  .agent{position:static;transform:none;width:auto;max-width:none;min-width:0;padding:7px 8px;gap:7px}
+  .agent .ds{white-space:normal}
+  .agent .ic{width:26px;height:26px;font-size:12px}
+  .agent .nm{font-size:11.5px}
+  .bal{text-align:left;margin-left:0;width:100%}
+  .bal .big{font-size:30px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section class="card">
+    <div class="top">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 40 40"><rect x="4" y="6" width="32" height="28" rx="10" fill="#f3f4f6"/><ellipse cx="15" cy="19" rx="2.6" ry="5" fill="#111" transform="rotate(-28 15 19)"/><ellipse cx="25" cy="21" rx="2.6" ry="5" fill="#111" transform="rotate(-28 25 21)"/></svg></div>
+      <div class="ttl">
+        <h1>Night Desk <b>· OT Signal</b></h1>
+        <div class="sub"><span><span class="dot off" id="dot"></span><span id="status">กำลังเชื่อมต่อ…</span></span><span id="runtime">00:00:00</span><span>8 agents</span><span id="assetLbl">BTC/USDT</span><span id="expLbl">หมดเวลา 1 นาที</span></div>
+      </div>
+      <div class="bal">
+        <div class="big" id="balance">$0.00</div>
+        <div class="meta"><span id="mult">1.00×</span> จากทุน <span id="start">$0</span> · <span id="ntr">0</span> เทรด · <span class="up" id="nw">0W</span> / <span class="down" id="nl">0L</span></div>
+      </div>
+    </div>
+    <div class="tools">
+      <button class="btn pri" id="btnRun">หยุดชั่วคราว</button>
+      <button class="btn" id="btnBt">ทดสอบย้อนหลัง</button>
+      <button class="btn" id="btnSet">ตั้งค่า</button>
+    </div>
+    <p class="paper">โหมดเทรดกระดาษ (เงินจำลอง) ใช้ราคาจริงจาก Binance แต่ไม่ได้เชื่อมกับบัญชี Olymp Trade และไม่ได้เทรดให้จริง</p>
+  </section>
+
+  <section class="card">
+    <div class="stats">
+      <div class="stat"><div class="k">อัตราชนะ</div><div class="v" id="sWr">–</div><div class="n" id="sWrN">ยังไม่มีเทรด</div></div>
+      <div class="stat"><div class="k">ต้องชนะอย่างน้อย</div><div class="v" id="sBe">–</div><div class="n">ถึงจะเท่าทุน ที่ payout <span id="sPay">82</span>%</div></div>
+      <div class="stat"><div class="k">กำไรคาดหวัง / เทรด</div><div class="v" id="sEv">–</div><div class="n">ต่อเงินลง $1 จากผลจริง</div></div>
+      <div class="stat"><div class="k">ขาดทุนลึกสุด</div><div class="v" id="sDd">0%</div><div class="n">จากจุดสูงสุดของบัญชี</div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="lbl">Balance · session <small id="eqBest"></small></div>
+    <svg id="equity" preserveAspectRatio="none"></svg>
+  </section>
+
+  <section class="card">
+    <div class="lbl">Agent orbit · ทุกตัวส่งเสียงให้ core <small id="evalAt">รอแท่งเทียนปิด</small></div>
+    <div class="orbit" id="orbit">
+      <svg class="wires" id="wires" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      <div class="core">
+        <div class="disc"><div class="logo"><svg viewBox="0 0 40 40"><rect x="4" y="6" width="32" height="28" rx="10" fill="#f3f4f6"/><ellipse cx="15" cy="19" rx="2.6" ry="5" fill="#111" transform="rotate(-28 15 19)"/><ellipse cx="25" cy="21" rx="2.6" ry="5" fill="#111" transform="rotate(-28 25 21)"/></svg></div></div>
+        <div class="dec" id="decision">รอสัญญาณ</div>
+        <div class="cap">SIGNAL CORE</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="duo">
+    <div class="card">
+      <div class="lbl"><span>Position · <span id="posAsset">BTC</span></span> <small id="posMeta">ไม่มีออเดอร์เปิด</small></div>
+      <canvas id="candles"></canvas>
+      <div class="pos-bar" id="posBar"><span class="chip">ราคา <span id="px">–</span></span></div>
+    </div>
+    <div class="card">
+      <div class="lbl">Night log · live <small id="logN">0 รายการ</small></div>
+      <ul class="log" id="log"></ul>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<dialog id="dlgSet"><form class="dlg" method="dialog" id="formSet">
+  <h2>ตั้งค่า</h2>
+  <div class="grid2">
+    <label class="f">สินทรัพย์<select name="symbol">
+      <option value="BTCUSDT">BTC/USDT</option><option value="ETHUSDT">ETH/USDT</option><option value="SOLUSDT">SOL/USDT</option>
+      <option value="BNBUSDT">BNB/USDT</option><option value="XRPUSDT">XRP/USDT</option><option value="LTCUSDT">LTC/USDT</option>
+      <option value="EURUSDT">EUR/USD (≈EURUSDT)</option></select></label>
+    <label class="f">เวลาหมดอายุ<select name="expiry"><option value="1">1 นาที</option><option value="2">2 นาที</option><option value="3">3 นาที</option><option value="5">5 นาที</option><option value="10">10 นาที</option></select></label>
+    <label class="f">Payout ที่ได้เมื่อชนะ (%)<input name="payout" type="number" min="10" max="100" step="1" inputmode="numeric"></label>
+    <label class="f">ทุนเริ่มต้น ($)<input name="startBal" type="number" min="1" step="1" inputmode="decimal"></label>
+    <label class="f">เงินต่อไม้ (% ของทุน)<input name="stakePct" type="number" min="0.5" max="20" step="0.5" inputmode="decimal"></label>
+    <label class="f">เสียงสุทธิขั้นต่ำ (1–5)<input name="minNet" type="number" min="1" max="5" step="1" inputmode="numeric"></label>
+    <label class="f">แพ้ติดกันกี่ไม้ให้พัก<input name="maxConsec" type="number" min="1" max="10" step="1" inputmode="numeric"></label>
+    <label class="f">หยุดทั้งวันเมื่อขาดทุน (%)<input name="dayStop" type="number" min="1" max="100" step="1" inputmode="numeric"></label>
+  </div>
+  <label class="chk"><input type="checkbox" name="sound"> เสียงและสั่นเมื่อมีสัญญาณ</label>
+  <p class="note">เปลี่ยนทุนเริ่มต้นหรือสินทรัพย์จะรีเซ็ตบัญชีจำลองและประวัติ</p>
+  <div class="row-end">
+    <button class="btn" value="reset" id="btnReset" type="button">รีเซ็ตบัญชี</button>
+    <button class="btn" value="cancel">ยกเลิก</button>
+    <button class="btn pri" value="save">บันทึก</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgBt"><div class="dlg">
+  <h2>ทดสอบย้อนหลัง</h2>
+  <p class="note" id="btInfo">ใช้กติกาเดียวกับระบบสด รันบนแท่งเทียน 1 นาทีล่าสุด 1,000 แท่ง (≈16 ชม.) ลงไม้ละ $1</p>
+  <div class="bt-res" id="btRes">กำลังคำนวณ…</div>
+  <div class="row-end"><button class="btn pri" id="btClose">ปิด</button></div>
+</div></dialog>
+
+<script>
+"use strict";
+/* ---------- storage (best effort) ---------- */
+const KEY = "nightdesk.v1";
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ cfg, acct })); } catch {} };
+
+const DEF = { symbol:"BTCUSDT", expiry:1, payout:82, startBal:100, stakePct:2, minNet:3, maxConsec:3, dayStop:20, sound:true };
+const saved = load();
+const cfg = Object.assign({}, DEF, saved && saved.cfg);
+const freshAcct = () => ({ bal:cfg.startBal, trades:[], equity:[{ t:Date.now(), b:cfg.startBal }], peak:cfg.startBal, maxDd:0,
+  consec:0, pauseUntil:0, day:new Date().toDateString(), dayStart:cfg.startBal, stoppedDay:false, log:[] });
+let acct = Object.assign(freshAcct(), saved && saved.acct);
+
+/* ---------- state ---------- */
+let candles = [];          // {t,o,h,l,c,v}; t = open time ms
+let pos = null;            // open paper position
+let mode = "connecting";   // live | sim | connecting
+let running = true;
+let ws = null, simTimer = null, lastClosedT = 0;
+const t0 = Date.now();
+
+/* ---------- agents ---------- */
+const AGENTS = [
+  { id:"trend",  nm:"TREND",      ds:"EMA 9 / 21 ทิศทางหลัก",   ic:"T", c:"--a-trend" },
+  { id:"mom",    nm:"MOMENTUM",   ds:"RSI 14 แรงส่ง",           ic:"M", c:"--a-mom" },
+  { id:"macd",   nm:"MACD",       ds:"ฮิสโตแกรมเร่งตัว",         ic:"D", c:"--a-macd" },
+  { id:"rev",    nm:"REVERSION",  ds:"Bollinger 20·2 ดีดกลับ",   ic:"R", c:"--a-rev" },
+  { id:"candle", nm:"CANDLE",     ds:"Engulfing · Pin bar",      ic:"C", c:"--a-candle" },
+  { id:"vol",    nm:"VOL FILTER", ds:"ATR นิ่งไป/แกว่งไป = ข้าม", ic:"V", c:"--a-vol" },
+  { id:"guard",  nm:"DRAWDOWN GUARD", ds:"แพ้ติด = พัก · ลิมิตวัน", ic:"G", c:"--a-guard" },
+  { id:"size",   nm:"SIZER",      ds:"ไม้ละ 2% ของทุน",          ic:"S", c:"--a-size" },
+];
+const VOTERS = ["trend","mom","macd","rev","candle"];
+
+/* ---------- indicators (full arrays) ---------- */
+function ema(a, p){ const k=2/(p+1), o=new Array(a.length).fill(NaN); let e;
+  for(let i=0;i<a.length;i++){ if(i<p-1) continue; if(e===undefined){ let s=0; for(let j=i-p+1;j<=i;j++) s+=a[j]; e=s/p; } else e=a[i]*k+e*(1-k); o[i]=e; } return o; }
+function rsi(a, p=14){ const o=new Array(a.length).fill(NaN); let g=0,l=0;
+  for(let i=1;i<a.length;i++){ const d=a[i]-a[i-1], up=Math.max(d,0), dn=Math.max(-d,0);
+    if(i<=p){ g+=up; l+=dn; if(i===p){ g/=p; l/=p; o[i]=l===0?100:100-100/(1+g/l); } }
+    else { g=(g*(p-1)+up)/p; l=(l*(p-1)+dn)/p; o[i]=l===0?100:100-100/(1+g/l); } } return o; }
+function boll(a, p=20, k=2){ const m=new Array(a.length).fill(NaN), u=m.slice(), lo=m.slice();
+  for(let i=p-1;i<a.length;i++){ let s=0; for(let j=i-p+1;j<=i;j++) s+=a[j]; const mu=s/p; let v=0; for(let j=i-p+1;j<=i;j++) v+=(a[j]-mu)**2;
+    const sd=Math.sqrt(v/p); m[i]=mu; u[i]=mu+k*sd; lo[i]=mu-k*sd; } return { m, u, lo }; }
+function macdH(a){ const f=ema(a,12), s=ema(a,26), line=a.map((_,i)=>f[i]-s[i]); const firstOk=line.findIndex(x=>!isNaN(x));
+  const sig=new Array(a.length).fill(NaN); if(firstOk>=0){ const e=ema(line.slice(firstOk),9); e.forEach((x,i)=>sig[i+firstOk]=x); }
+  return line.map((x,i)=>x-sig[i]); }
+function atr(cs, p=14){ const o=new Array(cs.length).fill(NaN); let v;
+  for(let i=1;i<cs.length;i++){ const c=cs[i], pc=cs[i-1].c, tr=Math.max(c.h-c.l,Math.abs(c.h-pc),Math.abs(c.l-pc));
+    if(i<p) continue; if(v===undefined){ let s=0; for(let j=i-p+1;j<=i;j++){ const cj=cs[j], pj=cs[j-1].c; s+=Math.max(cj.h-cj.l,Math.abs(cj.h-pj),Math.abs(cj.l-pj)); } v=s/p; }
+    else v=(v*(p-1)+tr)/p; o[i]=v; } return o; }
+function prep(cs){ const c=cs.map(x=>x.c); return { c, e9:ema(c,9), e21:ema(c,21), r:rsi(c,14), b:boll(c,20,2), h:macdH(c), a:atr(cs,14) }; }
+
+/* ---------- per-agent votes at closed candle i ---------- */
+function votes(cs, P, i){
+  const out = {}, c = P.c[i], x = cs[i], px = cs[i-1];
+  // TREND
+  out.trend = P.e9[i]>P.e21[i] && c>P.e9[i] ? 1 : P.e9[i]<P.e21[i] && c<P.e9[i] ? -1 : 0;
+  // MOMENTUM: trade with RSI between 52–70 / 30–48, leave extremes to REVERSION
+  const r=P.r[i]; out.mom = r>52 && r<70 ? 1 : r<48 && r>30 ? -1 : 0;
+  // MACD histogram above/below zero and accelerating
+  out.macd = P.h[i]>0 && P.h[i]>P.h[i-1] ? 1 : P.h[i]<0 && P.h[i]<P.h[i-1] ? -1 : 0;
+  // REVERSION at band edges or RSI extremes
+  out.rev = (c>=P.b.u[i] || r>=72) ? -1 : (c<=P.b.lo[i] || r<=28) ? 1 : 0;
+  // CANDLE: engulfing or pin bar
+  const body=Math.abs(x.c-x.o), rng=x.h-x.l || 1e-12, upW=x.h-Math.max(x.o,x.c), loW=Math.min(x.o,x.c)-x.l;
+  let cv=0;
+  if(x.c>x.o && px.c<px.o && x.c>=px.o && x.o<=px.c) cv=1;
+  else if(x.c<x.o && px.c>px.o && x.c<=px.o && x.o>=px.c) cv=-1;
+  else if(loW>2*body && loW>0.55*rng) cv=1;
+  else if(upW>2*body && upW>0.55*rng) cv=-1;
+  out.candle = cv;
+  // VOL FILTER: compare ATR% with its median over the last 100 candles
+  const ap=[]; for(let j=Math.max(1,i-100);j<=i;j++) if(!isNaN(P.a[j])) ap.push(P.a[j]/P.c[j]);
+  ap.sort((p,q)=>p-q); const med=ap[ap.length>>1]||0, now=P.a[i]/c;
+  out.volVeto = !(med>0) ? "ข้อมูลยังไม่พอ" : now<0.5*med ? "ตลาดนิ่งเกินไป" : now>2.5*med ? "แกว่งแรงเกินไป" : "";
+  out.atrRatio = med>0 ? now/med : 0;
+  return out;
+}
+function decide(v, minNet){
+  let up=0, dn=0; for(const k of VOTERS){ if(v[k]>0) up++; else if(v[k]<0) dn++; }
+  const net=up-dn, dir = net>=minNet ? 1 : net<=-minNet ? -1 : 0;
+  return { up, dn, net, dir: v.volVeto ? 0 : dir };
+}
+
+/* ---------- account / guard ---------- */
+const stake = () => Math.max(1, Math.round(acct.bal*cfg.stakePct)/100);
+function guardState(nowT){
+  const today=new Date().toDateString();
+  if(acct.day!==today){ acct.day=today; acct.dayStart=acct.bal; acct.stoppedDay=false; }
+  if(acct.stoppedDay) return "หยุดวันนี้: ขาดทุนถึงลิมิต "+cfg.dayStop+"%";
+  if(acct.bal < 1) return "ทุนหมด";
+  if(nowT < acct.pauseUntil) return "พัก: แพ้ติด "+cfg.maxConsec+" ไม้";
+  return "";
+}
+
+/* ---------- data: Binance public feed, fallback to simulation ---------- */
+const REST = ["https://data-api.binance.vision","https://api.binance.com"];
+const WSS  = ["wss://data-stream.binance.vision/ws/","wss://stream.binance.com:9443/ws/"];
+async function fetchKlines(sym, limit){
+  for(const base of REST){
+    try{
+      const ctl=new AbortController(), to=setTimeout(()=>ctl.abort(),7000);
+      const r=await fetch(`${base}/api/v3/klines?symbol=${sym}&interval=1m&limit=${limit}`,{ signal:ctl.signal }); clearTimeout(to);
+      if(!r.ok) continue; const j=await r.json(); if(!Array.isArray(j)||!j.length) continue;
+      return j.map(k=>({ t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }));
+    }catch{}
+  }
+  return null;
+}
+async function connect(){
+  stopFeed(); mode="connecting"; setStatus();
+  const hist = await fetchKlines(cfg.symbol, 300);
+  if(hist){ candles = hist.slice(0,-1); lastClosedT = candles.at(-1).t; candles.push(hist.at(-1)); mode="live"; openWs(0); }
+  else { startSim(); }
+  setStatus(); drawAll();
+  addLog("info", mode==="live" ? "เชื่อมต่อราคาจริงแล้ว" : "ดึงราคาจริงไม่ได้ — ใช้ราคาจำลอง", mode==="live" ? `${pretty(cfg.symbol)} แท่ง 1 นาที จาก Binance` : "ตลาดสุ่ม เร่งเวลา 1 นาที ≈ 1.5 วินาที", "");
+}
+function openWs(n){
+  const url = WSS[n % WSS.length] + cfg.symbol.toLowerCase() + "@kline_1m";
+  try{ ws = new WebSocket(url); }catch{ ws=null; setTimeout(()=>mode==="live"&&openWs(n+1),3000); return; }
+  const me = ws;
+  ws.onmessage = e => { if(me!==ws) return; try{ const k=JSON.parse(e.data).k; if(k) onKline({ t:k.t, o:+k.o, h:+k.h, l:+k.l, c:+k.c, v:+k.v }, k.x); }catch{} };
+  ws.onclose = () => { if(me!==ws || mode!=="live") return; setTimeout(()=>{ if(me===ws && mode==="live") openWs(n+1); }, 3000); };
+}
+function stopFeed(){ if(ws){ const w=ws; ws=null; try{ w.close(); }catch{} } if(simTimer){ clearInterval(simTimer); simTimer=null; } }
+function onKline(c, closed){
+  const last=candles.at(-1);
+  if(last && last.t===c.t) candles[candles.length-1]=c; else if(!last || c.t>last.t) candles.push(c);
+  if(candles.length>500) candles.splice(0,candles.length-500);
+  if(closed && c.t>lastClosedT){ lastClosedT=c.t; onClose(); }
+  drawCandles(); updatePos();
+}
+/* simulation: regime-switching random walk, 5 ticks per candle */
+let simDrift=0, simVol=0.0009, simTick=0;
+function startSim(){
+  mode="sim"; let p=65000, t=Math.floor(Date.now()/60000)*60000-300*60000; candles=[];
+  for(let i=0;i<300;i++){ const c=simCandle(p,t); candles.push(c); p=c.c; t+=60000; }
+  lastClosedT=candles.at(-1).t; candles.push({ t, o:p, h:p, l:p, c:p, v:0 }); simTick=0;
+  simTimer=setInterval(()=>{
+    const f=candles.at(-1), step=f.c*(simDrift/5 + simVol/Math.sqrt(5)*gauss());
+    const c=Object.assign({}, f, { c:f.c+step }); c.h=Math.max(c.h,c.c); c.l=Math.min(c.l,c.c); c.v+=Math.random()*20;
+    simTick++;
+    if(simTick>=5){ simTick=0; onKline(c,true); const n={ t:c.t+60000, o:c.c, h:c.c, l:c.c, c:c.c, v:0 }; candles.push(n); if(Math.random()<0.04) regime(); }
+    else onKline(c,false);
+  }, 300);
+}
+function regime(){ simDrift=(Math.random()-0.5)*0.0012; simVol=0.0005+Math.random()*0.0012; }
+function gauss(){ let u=0,v=0; while(!u) u=Math.random(); while(!v) v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function simCandle(p,t){ if(Math.random()<0.04) regime(); let o=p,h=p,l=p,c=p; for(let k=0;k<5;k++){ c+=c*(simDrift/5+simVol/Math.sqrt(5)*gauss()); h=Math.max(h,c); l=Math.min(l,c); } return { t,o,h,l,c,v:50+Math.random()*200 }; }
+
+/* ---------- the loop: runs once per closed candle ---------- */
+let lastVotes=null, lastDec=null;
+function onClose(){
+  const closedIdx = candles.length-1;  // the candle that just closed (forming candle not yet pushed for live)
+  const cl = candles[closedIdx];
+  // 1) settle position
+  if(pos && cl.t >= pos.settleT) settle(cl.c);
+  // 2) evaluate
+  if(candles.length<60) return;
+  const P=prep(candles), v=votes(candles,P,closedIdx), d=decide(v,cfg.minNet);
+  const g=guardState(cl.t+60000);
+  lastVotes=v; lastDec={...d, guard:g};
+  animateOrbit(v,d,g);
+  document.getElementById("evalAt").textContent = "ประเมินล่าสุด "+hhmm(cl.t+60000);
+  if(!running || pos) return;
+  if(d.dir===0){ return; }
+  if(g){ addLog("warn","ข้ามสัญญาณ "+(d.dir>0?"ขึ้น":"ลง"), g, ""); return; }
+  const s=stake();
+  pos={ dir:d.dir, entry:cl.c, entryT:cl.t+60000, settleT:cl.t+cfg.expiry*60000, stake:s, payout:cfg.payout, net:d.net };
+  addLog(d.dir>0?"up":"down", (d.dir>0?"▲ ขึ้น ":"▼ ลง ")+pretty(cfg.symbol), `เสียง ${d.up} ขึ้น / ${d.dn} ลง · เข้า ${fmtPx(cl.c)} · ${cfg.expiry} นาที`, "$"+s.toFixed(2));
+  signalAlert(d.dir, s);
+  updatePos();
+}
+function settle(px){
+  const p=pos; pos=null;
+  const res = px===p.entry ? 0 : (px>p.entry)===(p.dir>0) ? 1 : -1;
+  const pnl = res>0 ? p.stake*p.payout/100 : res<0 ? -p.stake : 0;
+  acct.bal = Math.round((acct.bal+pnl)*100)/100;
+  acct.trades.push({ t:Date.now(), dir:p.dir, res, pnl, stake:p.stake });
+  acct.equity.push({ t:Date.now(), b:acct.bal }); if(acct.equity.length>2000) acct.equity.shift();
+  acct.peak=Math.max(acct.peak,acct.bal); acct.maxDd=Math.max(acct.maxDd,(acct.peak-acct.bal)/acct.peak);
+  if(res<0){ acct.consec++; if(acct.consec>=cfg.maxConsec){ acct.pauseUntil=p.settleT+60000+15*60000; acct.consec=0; addLog("warn","GUARD พัก 15 แท่ง",`แพ้ติดกัน ${cfg.maxConsec} ไม้`,""); } }
+  else if(res>0) acct.consec=0;
+  if((acct.dayStart-acct.bal)/acct.dayStart*100 >= cfg.dayStop && !acct.stoppedDay){ acct.stoppedDay=true; addLog("warn","GUARD หยุดทั้งวัน",`ขาดทุนวันนี้ถึง ${cfg.dayStop}%`,""); }
+  addLog(res>0?"win":res<0?"loss":"tie", (res>0?"WIN ":res<0?"LOSS ":"เสมอ ")+(p.dir>0?"▲ ":"▼ ")+pretty(cfg.symbol), `${fmtPx(p.entry)} → ${fmtPx(px)}`, (pnl>=0?"+":"−")+"$"+Math.abs(pnl).toFixed(2));
+  save(); drawHeader(); drawEquity();
+}
+
+/* ---------- UI: header / stats ---------- */
+const $ = id => document.getElementById(id);
+const pretty = s => s==="EURUSDT" ? "EUR/USD" : s.replace("USDT","/USDT");
+const money = n => "$"+n.toLocaleString("en-US",{ minimumFractionDigits:2, maximumFractionDigits:2 });
+const pad = n => String(n).padStart(2,"0");
+const hhmm = t => { const d=new Date(t); return pad(d.getHours())+":"+pad(d.getMinutes()); };
+function fmtPx(p){ return p>=1000 ? p.toFixed(2) : p>=10 ? p.toFixed(3) : p.toFixed(5); }
+function setStatus(){
+  const dot=$("dot"); dot.className="dot"+(mode==="sim"?" sim":mode==="live"?"":" off");
+  $("status").textContent = !running ? "หยุดชั่วคราว" : mode==="live" ? "ราคาจริง · ทำงาน" : mode==="sim" ? "ราคาจำลอง · ทำงาน" : "กำลังเชื่อมต่อ…";
+  $("assetLbl").textContent=pretty(cfg.symbol); $("posAsset").textContent=pretty(cfg.symbol).split("/")[0];
+  $("expLbl").textContent="หมดเวลา "+cfg.expiry+" นาที";
+  $("btnRun").textContent = running ? "หยุดชั่วคราว" : "เริ่มทำงาน";
+}
+function drawHeader(){
+  const tr=acct.trades, w=tr.filter(x=>x.res>0).length, l=tr.filter(x=>x.res<0).length, decided=w+l;
+  $("balance").textContent=money(acct.bal);
+  const m=acct.bal/cfg.startBal; const mu=$("mult"); mu.textContent=m.toFixed(2)+"×"; mu.className=m>=1?"up":"down";
+  $("start").textContent=money(cfg.startBal); $("ntr").textContent=tr.length; $("nw").textContent=w+"W"; $("nl").textContent=l+"L";
+  const be=100/(1+cfg.payout/100);
+  $("sPay").textContent=cfg.payout; $("sBe").textContent=be.toFixed(1)+"%";
+  if(decided){ const wr=w/decided*100; const el=$("sWr"); el.textContent=wr.toFixed(1)+"%"; el.className="v "+(wr>=be?"up":"down");
+    $("sWrN").textContent=`${w} ชนะ จาก ${decided} ไม้`;
+    const ev=(w*cfg.payout/100 - l)/decided; const e=$("sEv"); e.textContent=(ev>=0?"+":"−")+"$"+Math.abs(ev).toFixed(3); e.className="v "+(ev>=0?"up":"down"); }
+  else { $("sWr").textContent="–"; $("sWr").className="v"; $("sWrN").textContent="ยังไม่มีเทรด"; $("sEv").textContent="–"; $("sEv").className="v"; }
+  $("sDd").textContent=(acct.maxDd*100).toFixed(1)+"%";
+  AGENTS.find(a=>a.id==="size").ds=`ไม้ละ ${cfg.stakePct}% ≈ $${stake().toFixed(2)}`;
+  const sz=document.querySelector('[data-id="size"] .ds'); if(sz) sz.textContent=AGENTS.find(a=>a.id==="size").ds;
+}
+setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); $("runtime").textContent=pad(Math.floor(s/3600))+":"+pad(Math.floor(s/60)%60)+":"+pad(s%60); updatePos(); },1000);
+
+/* ---------- UI: equity curve ---------- */
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function drawEquity(){
+  const svg=$("equity"), W=svg.clientWidth||600, H=svg.clientHeight||150; svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const pts=acct.equity.length>1 ? acct.equity : [acct.equity[0], { t:Date.now(), b:acct.bal }];
+  let lo=Math.min(...pts.map(p=>p.b), cfg.startBal), hi=Math.max(...pts.map(p=>p.b), cfg.startBal); if(hi-lo<1e-9){ hi+=1; lo-=1; }
+  const pad=(hi-lo)*0.12; lo-=pad; hi+=pad;
+  const X=i=>8+i/(pts.length-1)*(W-70), Y=b=>6+(1-(b-lo)/(hi-lo))*(H-22);
+  const line=pts.map((p,i)=>`${X(i).toFixed(1)},${Y(p.b).toFixed(1)}`).join(" ");
+  const up=acct.bal>=cfg.startBal, col=up?css("--up"):css("--down");
+  const yS=Y(cfg.startBal);
+  svg.innerHTML=`<defs><linearGradient id="eg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity=".22"/><stop offset="1" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+   <line x1="8" x2="${W-62}" y1="${yS}" y2="${yS}" stroke="${css("--line2")}" stroke-dasharray="3 4"/>
+   <text x="${W-58}" y="${yS+4}" font-size="10.5" font-family="IBM Plex Mono,monospace" fill="${css("--faint")}">ทุน</text>
+   <polygon points="8,${H-16} ${line} ${X(pts.length-1)},${H-16}" fill="url(#eg)"/>
+   <polyline points="${line}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>
+   <circle cx="${X(pts.length-1)}" cy="${Y(acct.bal)}" r="3.5" fill="${col}"/>
+   <rect x="${W-62}" y="${Y(acct.bal)-10}" width="60" height="20" rx="5" fill="${col}"/>
+   <text x="${W-32}" y="${Y(acct.bal)+4}" text-anchor="middle" font-size="10.5" font-weight="600" font-family="IBM Plex Mono,monospace" fill="${css("--surface")}">${acct.bal>=1000?Math.round(acct.bal):acct.bal.toFixed(2)}</text>`;
+  const best=Math.max(...acct.equity.map(p=>p.b)); $("eqBest").textContent="สูงสุด "+money(best);
+}
+
+/* ---------- UI: orbit ---------- */
+function buildOrbit(){
+  const orb=$("orbit"), wires=$("wires"); let w=`<ellipse class="ring" cx="50" cy="50" rx="30" ry="30"/>`;
+  AGENTS.forEach((a,k)=>{
+    const ang=(-90+22.5+k*45)*Math.PI/180, x=50+38*Math.cos(ang), y=50+40*Math.sin(ang);
+    const el=document.createElement("div"); el.className="agent"; el.dataset.id=a.id; el.style.left=x+"%"; el.style.top=y+"%"; el.style.setProperty("--c",`var(${a.c})`);
+    el.innerHTML=`<div class="ic">${a.ic}</div><div class="tx"><div class="nm">${a.nm}</div><div class="ds">${a.ds}</div></div><span class="vote">–</span>`;
+    orb.appendChild(el);
+    w+=`<line class="wire" data-w="${a.id}" x1="${x}" y1="${y}" x2="50" y2="50"/>`;
+  });
+  wires.innerHTML=w;
+}
+let orbitTimers=[];
+function animateOrbit(v,d,g){
+  orbitTimers.forEach(clearTimeout); orbitTimers=[];
+  document.querySelectorAll(".agent").forEach(el=>el.classList.remove("hot"));
+  document.querySelectorAll(".wire").forEach(el=>{ el.classList.remove("hot"); el.style.stroke=""; });
+  AGENTS.forEach((a,k)=>orbitTimers.push(setTimeout(()=>{
+    const el=document.querySelector(`.agent[data-id="${a.id}"]`), vt=el.querySelector(".vote"), wire=document.querySelector(`.wire[data-w="${a.id}"]`);
+    let txt="–", cls="vote";
+    if(VOTERS.includes(a.id)){ const x=v[a.id]; txt=x>0?"▲":x<0?"▼":"–"; cls+=x>0?" u":x<0?" d":""; }
+    else if(a.id==="vol"){ txt=v.volVeto?"ข้าม":"ok "+v.atrRatio.toFixed(1)+"×"; cls+=v.volVeto?" x":" u"; }
+    else if(a.id==="guard"){ txt=g?"พัก":"ok"; cls+=g?" x":" u"; }
+    else if(a.id==="size"){ txt="$"+stake().toFixed(0); }
+    vt.textContent=txt; vt.className=cls;
+    document.querySelectorAll(".agent").forEach(e=>e.classList.remove("hot")); el.classList.add("hot");
+    document.querySelectorAll(".wire").forEach(e=>e.classList.remove("hot")); wire.classList.add("hot"); wire.style.stroke=`var(${a.c})`;
+  }, k*140)));
+  orbitTimers.push(setTimeout(()=>{
+    const dec=$("decision");
+    if(v.volVeto) { dec.textContent="ข้าม · "+v.volVeto; dec.style.color="var(--warn)"; }
+    else if(d.dir>0){ dec.textContent=`▲ ขึ้น  ${d.up}/${VOTERS.length}${g?" · พัก":""}`; dec.style.color="var(--up)"; }
+    else if(d.dir<0){ dec.textContent=`▼ ลง  ${d.dn}/${VOTERS.length}${g?" · พัก":""}`; dec.style.color="var(--down)"; }
+    else { dec.textContent=`ไม่ชัด · ขึ้น ${d.up} ลง ${d.dn}`; dec.style.color="var(--muted)"; }
+  }, AGENTS.length*140));
+}
+
+/* ---------- UI: candles ---------- */
+function drawCandles(){
+  const cv=$("candles"), dpr=window.devicePixelRatio||1, W=cv.clientWidth, H=cv.clientHeight; if(!W) return;
+  if(cv.width!==Math.round(W*dpr)){ cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr); }
+  const g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  const n=Math.min(candles.length, W<420?40:60); if(n<2) return;
+  const cs=candles.slice(-n), P=prep(candles.slice(-(n+60))), off=P.c.length-n;
+  let hi=-Infinity, lo=Infinity; cs.forEach(c=>{ hi=Math.max(hi,c.h); lo=Math.min(lo,c.l); });
+  if(pos){ hi=Math.max(hi,pos.entry); lo=Math.min(lo,pos.entry); }
+  const padv=(hi-lo)*0.08||1; hi+=padv; lo-=padv;
+  const plotR=W-58, volH=34, top=6, bot=H-volH-18, cw=plotR/n;
+  const Y=p=>top+(1-(p-lo)/(hi-lo))*(bot-top), X=i=>i*cw+cw/2;
+  const cUp=css("--up"), cDn=css("--down"), cLine=css("--line"), cFaint=css("--faint");
+  g.font="10.5px IBM Plex Mono, monospace"; g.fillStyle=cFaint; g.strokeStyle=cLine; g.lineWidth=1;
+  for(let k=0;k<=3;k++){ const p=lo+(hi-lo)*k/3, y=Y(p); g.beginPath(); g.setLineDash([2,4]); g.moveTo(0,y); g.lineTo(plotR,y); g.stroke(); g.setLineDash([]); g.fillText(fmtPx(p),plotR+4,y+3); }
+  // bollinger + emas
+  const path=(arr,col,wd,dash)=>{ g.beginPath(); g.strokeStyle=col; g.lineWidth=wd; g.setLineDash(dash||[]); let st=false;
+    for(let i=0;i<n;i++){ const val=arr[off+i]; if(isNaN(val)) continue; const x=X(i), y=Y(val); st?g.lineTo(x,y):(g.moveTo(x,y),st=true); } g.stroke(); g.setLineDash([]); };
+  path(P.b.u,cLine,1,[3,3]); path(P.b.lo,cLine,1,[3,3]); path(P.e21,css("--a-rev"),1.2); path(P.e9,css("--a-trend"),1.2);
+  const vmax=Math.max(...cs.map(c=>c.v))||1;
+  cs.forEach((c,i)=>{ const col=c.c>=c.o?cUp:cDn, x=X(i); g.strokeStyle=col; g.fillStyle=col; g.lineWidth=1;
+    g.beginPath(); g.moveTo(x,Y(c.h)); g.lineTo(x,Y(c.l)); g.stroke();
+    const y1=Y(Math.max(c.o,c.c)), y2=Y(Math.min(c.o,c.c)); g.fillRect(x-cw*0.32,y1,cw*0.64,Math.max(1,y2-y1));
+    g.globalAlpha=0.28; const vh=c.v/vmax*volH; g.fillRect(x-cw*0.32,H-vh-14,cw*0.64,vh); g.globalAlpha=1; });
+  if(pos){
+    const col=pos.dir>0?cUp:cDn, y=Y(pos.entry); g.strokeStyle=col; g.setLineDash([5,4]); g.lineWidth=1.5; g.beginPath(); g.moveTo(0,y); g.lineTo(plotR,y); g.stroke(); g.setLineDash([]);
+    g.fillStyle=col; g.fillRect(plotR+1,y-9,57,18); g.fillStyle=css("--surface"); g.fillText((pos.dir>0?"▲ ":"▼ ")+"เข้า",plotR+5,y+4);
+    const ei=cs.findIndex(c=>c.t===pos.entryT-60000); if(ei>=0){ const x=X(ei); g.fillStyle=col; g.beginPath();
+      if(pos.dir>0){ g.moveTo(x,Y(cs[ei].l)+6); g.lineTo(x-5,Y(cs[ei].l)+14); g.lineTo(x+5,Y(cs[ei].l)+14); } else { g.moveTo(x,Y(cs[ei].h)-6); g.lineTo(x-5,Y(cs[ei].h)-14); g.lineTo(x+5,Y(cs[ei].h)-14); } g.fill(); }
+    const si=cs.findIndex(c=>c.t===pos.settleT); if(si>=0){ g.strokeStyle=col; g.globalAlpha=.5; g.beginPath(); g.moveTo(X(si)+cw/2,top); g.lineTo(X(si)+cw/2,bot); g.stroke(); g.globalAlpha=1; }
+  }
+  // time axis
+  g.fillStyle=cFaint; [0, Math.floor(n/2), n-1].forEach(i=>g.fillText(hhmm(cs[i].t), Math.min(Math.max(0,X(i)-14),plotR-34), H-2));
+}
+function updatePos(){
+  const last=candles.at(-1); if(!last) return;
+  $("px").textContent=fmtPx(last.c);
+  const bar=$("posBar");
+  if(!pos){ bar.innerHTML=`<span class="chip">ราคา <span id="px">${fmtPx(last.c)}</span></span><span class="muted">${running?"รอสัญญาณถัดไป":"หยุดชั่วคราว"}</span>`; $("posMeta").textContent="ไม่มีออเดอร์เปิด"; return; }
+  const winning = last.c===pos.entry ? 0 : (last.c>pos.entry)===(pos.dir>0) ? 1 : -1;
+  let left;
+  if(mode==="live"){ const ms=pos.settleT+60000-Date.now(); left=ms>0?`${Math.floor(ms/60000)}:${pad(Math.floor(ms/1000)%60)}`:"กำลังปิด…"; }
+  else { const rem=Math.max(0,Math.round((pos.settleT-candles.at(-1).t)/60000)+1); left=`${rem} แท่ง`; }
+  bar.innerHTML=`<span class="chip ${pos.dir>0?"u":"d"}">${pos.dir>0?"▲ ขึ้น":"▼ ลง"} $${pos.stake.toFixed(2)}</span>
+    <span class="chip">เข้า ${fmtPx(pos.entry)}</span><span class="chip">ตอนนี้ <span id="px">${fmtPx(last.c)}</span></span>
+    <span class="chip ${winning>0?"u":winning<0?"d":""}">${winning>0?"กำลังชนะ +$"+(pos.stake*pos.payout/100).toFixed(2):winning<0?"กำลังแพ้ −$"+pos.stake.toFixed(2):"เท่าทุน"}</span><span class="chip">เหลือ ${left}</span>`;
+  $("posMeta").textContent=`เปิดอยู่ · payout ${pos.payout}% · ${cfg.expiry} นาที`;
+}
+
+/* ---------- UI: log ---------- */
+function addLog(tag, title, sub, amt){
+  acct.log.unshift({ t:Date.now(), tag, title, sub, amt }); if(acct.log.length>200) acct.log.length=200; save(); renderLog();
+}
+function renderLog(){
+  const tagTxt={ up:"BUY", down:"SELL", win:"WIN", loss:"LOSS", tie:"TIE", warn:"GUARD", info:"INFO" };
+  $("log").innerHTML=acct.log.slice(0,60).map(e=>`<li><span class="t">${hhmm(e.t)}</span><span class="tag ${e.tag}">${tagTxt[e.tag]||e.tag}</span>
+    <div class="m"><b>${esc(e.title)}</b><div>${esc(e.sub)}</div></div><span class="amt ${e.tag==="win"?"up":e.tag==="loss"?"down":""}">${esc(e.amt)}</span></li>`).join("");
+  $("logN").textContent=acct.log.length+" รายการ";
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" })[c]);
+
+/* ---------- alerts ---------- */
+let actx=null;
+function beep(f,d){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const o=actx.createOscillator(), g=actx.createGain();
+  o.frequency.value=f; o.connect(g); g.connect(actx.destination); g.gain.setValueAtTime(.15,actx.currentTime); g.gain.exponentialRampToValueAtTime(.001,actx.currentTime+d); o.start(); o.stop(actx.currentTime+d); }catch{} }
+function signalAlert(dir,s){
+  const t=$("toast"); t.textContent=`สัญญาณ ${dir>0?"▲ ขึ้น":"▼ ลง"} · ${pretty(cfg.symbol)} · ${cfg.expiry} นาที · เทรดกระดาษ $${s.toFixed(2)}`;
+  t.classList.add("on"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("on"),4000);
+  if(cfg.sound){ beep(dir>0?880:520,.18); setTimeout(()=>beep(dir>0?1175:390,.22),180); try{ navigator.vibrate&&navigator.vibrate([60,40,60]); }catch{} }
+}
+
+/* ---------- backtest ---------- */
+async function backtest(){
+  const res=$("btRes"); res.textContent="กำลังดึงข้อมูล…"; $("dlgBt").showModal();
+  let cs=await fetchKlines(cfg.symbol,1000), src="ราคาจริง "+pretty(cfg.symbol);
+  if(!cs){ cs=[]; let p=65000,t=Date.now()-1000*60000; for(let i=0;i<1000;i++){ const c=simCandle(p,t); cs.push(c); p=c.c; t+=60000; } src="ราคาจำลอง (ดึงราคาจริงไม่ได้)"; }
+  const P=prep(cs), E=cfg.expiry, pay=cfg.payout/100;
+  let w=0,l=0,tie=0, i=60; const per={}; VOTERS.forEach(k=>per[k]={ w:0, n:0 });
+  let bal=0, peak=0, dd=0;
+  for(let j=60;j<cs.length-E;j++){
+    const v=votes(cs,P,j), fut=cs[j+E].c, mv=Math.sign(fut-cs[j].c);
+    VOTERS.forEach(k=>{ if(v[k] && mv){ per[k].n++; if(v[k]===mv) per[k].w++; } });
+    if(j<i) continue;
+    const d=decide(v,cfg.minNet); if(!d.dir) continue;
+    if(!mv) tie++; else if(mv===d.dir){ w++; bal+=pay; } else { l++; bal-=1; }
+    peak=Math.max(peak,bal); dd=Math.max(dd,peak-bal);
+    i=j+E;  // one position at a time
+  }
+  const n=w+l, wr=n?w/n*100:0, be=100/(1+pay), ev=n?(w*pay-l)/n:0;
+  const rows=VOTERS.map(k=>{ const a=AGENTS.find(x=>x.id===k), p=per[k], r=p.n?p.w/p.n*100:0;
+    return `<tr><td>${a.nm} เดี่ยว ๆ</td><td>${p.n}</td><td class="${r>=be?"up":"down"}">${r.toFixed(1)}%</td></tr>`; }).join("");
+  res.innerHTML=`<p class="note">${src} · ${cs.length} แท่ง · หมดเวลา ${E} นาที · payout ${cfg.payout}% · เสียงสุทธิ ≥ ${cfg.minNet}</p>
+   <table><tr><th></th><th>ไม้</th><th>ชนะ</th></tr>
+   <tr><td><b>ระบบรวม (Core)</b></td><td>${n}${tie?` (+${tie} เสมอ)`:""}</td><td class="${wr>=be?"up":"down"}"><b>${n?wr.toFixed(1)+"%":"–"}</b></td></tr>${rows}</table>
+   <table style="margin-top:8px"><tr><td>ต้องชนะอย่างน้อย (จุดคุ้มทุน)</td><td>${be.toFixed(1)}%</td></tr>
+   <tr><td>ผลรวมถ้าลงไม้ละ $1</td><td class="${bal>=0?"up":"down"}">${bal>=0?"+":"−"}$${Math.abs(bal).toFixed(2)}</td></tr>
+   <tr><td>กำไรคาดหวังต่อไม้ $1</td><td class="${ev>=0?"up":"down"}">${ev>=0?"+":"−"}$${Math.abs(ev).toFixed(3)}</td></tr>
+   <tr><td>ขาดทุนสะสมลึกสุด</td><td>$${dd.toFixed(2)}</td></tr></table>
+   <div class="verdict ${n>=30&&wr>=be?"good":"bad"}" style="margin-top:10px">${n<30?"จำนวนไม้ยังน้อยเกินไปที่จะสรุปได้ ลองลดเสียงสุทธิขั้นต่ำ หรือเปลี่ยนเวลาหมดอายุ":wr>=be?"ช่วงนี้ผ่านจุดคุ้มทุน แต่ผลย้อนหลังไม่การันตีอนาคต ควรเทรดกระดาษต่ออีกหลายวันก่อนตัดสินใจ":"ช่วงนี้ชนะไม่ถึงจุดคุ้มทุน ถ้าเทรดด้วยเงินจริงตามสัญญาณนี้ มีแนวโน้มขาดทุน"}</div>`;
+}
+
+/* ---------- controls ---------- */
+$("btnRun").onclick=()=>{ running=!running; setStatus(); updatePos(); addLog("info", running?"เริ่มทำงาน":"หยุดชั่วคราว", running?"รอแท่งเทียนปิดถัดไป":"ไม่เปิดไม้ใหม่ (ไม้ที่เปิดอยู่ยังรอผล)",""); };
+$("btnBt").onclick=backtest; $("btClose").onclick=()=>$("dlgBt").close();
+$("btnSet").onclick=()=>{ const f=$("formSet"); for(const k of Object.keys(DEF)){ const el=f.elements[k]; if(!el) continue; if(el.type==="checkbox") el.checked=!!cfg[k]; else el.value=cfg[k]; } $("dlgSet").showModal(); };
+$("btnReset").onclick=()=>{ if(!confirm("รีเซ็ตบัญชีจำลองและประวัติทั้งหมด?")) return; pos=null; acct=freshAcct(); save(); $("dlgSet").close(); refreshAll(); addLog("info","รีเซ็ตบัญชี","ทุน "+money(cfg.startBal),""); };
+$("dlgSet").addEventListener("close",()=>{
+  if($("dlgSet").returnValue!=="save") return;
+  const f=$("formSet"), old={...cfg}, num=(k,lo,hi)=>{ const v=parseFloat(f.elements[k].value); if(isFinite(v)) cfg[k]=Math.min(hi,Math.max(lo,v)); };
+  cfg.symbol=f.elements.symbol.value; cfg.expiry=+f.elements.expiry.value; cfg.sound=f.elements.sound.checked;
+  num("payout",10,100); num("startBal",1,1e9); num("stakePct",0.5,20); num("minNet",1,5); num("maxConsec",1,10); num("dayStop",1,100);
+  cfg.minNet=Math.round(cfg.minNet); cfg.maxConsec=Math.round(cfg.maxConsec);
+  if(old.startBal!==cfg.startBal || old.symbol!==cfg.symbol){ pos=null; acct=freshAcct(); }
+  save(); refreshAll();
+  if(old.symbol!==cfg.symbol) connect();
+});
+function refreshAll(){ setStatus(); drawHeader(); drawEquity(); renderLog(); drawCandles(); updatePos(); }
+function drawAll(){ refreshAll(); }
+let rz; window.addEventListener("resize",()=>{ clearTimeout(rz); rz=setTimeout(()=>{ drawEquity(); drawCandles(); },120); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>{ drawEquity(); drawCandles(); });
+
+/* ---------- boot ---------- */
+buildOrbit(); refreshAll(); connect();
+</script>
+</body>
+</html>
